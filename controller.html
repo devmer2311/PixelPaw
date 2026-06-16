@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self';" />
+		<title>PixelPaw</title>
+		<style>
+			:root {
+				--bg: #0d0b14;
+				--bg2: #15111f;
+				--card: rgba(255, 255, 255, 0.045);
+				--stroke: rgba(255, 255, 255, 0.09);
+				--txt: #f4f1ff;
+				--muted: #9a93b5;
+				--a1: #b16cff; /* violet */
+				--a2: #4be3c9; /* mint */
+				--a3: #ff7eb6; /* pink */
+				--grad: linear-gradient(120deg, #b16cff, #6c8bff 40%, #4be3c9);
+			}
+			* { margin: 0; padding: 0; box-sizing: border-box; }
+			html, body { height: 100%; }
+			body {
+				font-family: "Segoe UI", -apple-system, system-ui, sans-serif;
+				color: var(--txt);
+				background: radial-gradient(1200px 600px at 100% -10%, #2a1c44 0%, transparent 55%),
+					radial-gradient(900px 500px at -10% 110%, #10303a 0%, transparent 50%),
+					var(--bg);
+				font-size: 13px;
+				overflow-y: auto;
+			}
+			.wrap { max-width: 520px; margin: 0 auto; padding: 20px 18px 40px; }
+
+			/* Header */
+			.hero {
+				position: relative;
+				border-radius: 20px;
+				padding: 18px 18px 16px;
+				background: linear-gradient(135deg, rgba(177,108,255,0.22), rgba(75,227,201,0.12));
+				border: 1px solid var(--stroke);
+				overflow: hidden;
+			}
+			.hero::after {
+				content: ""; position: absolute; inset: -40% -40% auto auto; width: 240px; height: 240px;
+				background: conic-gradient(from 0deg, var(--a1), var(--a2), var(--a3), var(--a1));
+				filter: blur(48px); opacity: 0.35; animation: spin 14s linear infinite;
+			}
+			@keyframes spin { to { transform: rotate(360deg); } }
+			.brand { display: flex; align-items: center; gap: 12px; position: relative; z-index: 1; }
+			.brand .logo {
+				width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center;
+				background: rgba(0,0,0,0.25); border: 1px solid var(--stroke); font-size: 26px;
+			}
+			.brand h1 {
+				font-size: 26px; font-weight: 800; letter-spacing: -0.02em; line-height: 1;
+				background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent;
+			}
+			.brand p { color: var(--muted); font-size: 11.5px; margin-top: 3px; }
+			.live { margin-left: auto; font-size: 10px; color: var(--a2); display: flex; align-items: center; gap: 5px; position: relative; z-index: 1; }
+			.live i { width: 7px; height: 7px; border-radius: 50%; background: var(--a2); box-shadow: 0 0 8px var(--a2); animation: pulse 1.6s infinite; }
+			@keyframes pulse { 50% { opacity: 0.3; } }
+
+			/* Cards */
+			.card {
+				margin-top: 14px; padding: 16px; border-radius: 18px;
+				background: var(--card); border: 1px solid var(--stroke);
+				backdrop-filter: blur(8px);
+			}
+			.card h2 {
+				font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.14em;
+				color: var(--muted); margin-bottom: 13px; display: flex; align-items: center; gap: 7px;
+			}
+			.card h2 .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--a1); box-shadow: 0 0 8px var(--a1); }
+
+			/* Cat chooser */
+			.cats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; }
+			.catcard {
+				position: relative; border-radius: 14px; padding: 8px 4px 7px; cursor: pointer; text-align: center;
+				background: rgba(255,255,255,0.03); border: 1.5px solid transparent; transition: all .15s ease;
+			}
+			.catcard:hover { background: rgba(255,255,255,0.07); transform: translateY(-2px); }
+			.catcard.active { border-color: var(--a1); background: rgba(177,108,255,0.14); box-shadow: 0 6px 20px -8px var(--a1); }
+			.catcard canvas { width: 52px; height: 52px; image-rendering: pixelated; }
+			.catcard span { display: block; font-size: 9.5px; color: var(--muted); margin-top: 2px; }
+			.catcard.active span { color: var(--txt); }
+
+			/* Customize */
+			.studio { display: flex; gap: 16px; align-items: stretch; }
+			.stage {
+				flex: 0 0 132px; border-radius: 14px; position: relative; overflow: hidden;
+				background:
+					linear-gradient(rgba(255,255,255,0.05), rgba(255,255,255,0.05)),
+					repeating-linear-gradient(45deg, rgba(255,255,255,0.03) 0 8px, transparent 8px 16px);
+				border: 1px solid var(--stroke); display: grid; place-items: end center;
+			}
+			.stage canvas { width: 124px; height: 132px; image-rendering: pixelated; }
+			.studio .fields { flex: 1; }
+			.swatches { display: flex; gap: 12px; }
+			.sw { text-align: center; }
+			.sw label { display: block; font-size: 10px; color: var(--muted); margin-bottom: 5px; }
+			input[type=color] {
+				width: 44px; height: 38px; border: 1px solid var(--stroke); border-radius: 11px;
+				background: none; cursor: pointer; padding: 2px;
+			}
+			.field { margin-top: 13px; }
+			.field > label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 6px; font-weight: 600; }
+			select, input[type=text], input[type=number], input[type=datetime-local], textarea {
+				width: 100%; padding: 10px 11px; border-radius: 11px; font-size: 13px; font-family: inherit;
+				color: var(--txt); background: rgba(0,0,0,0.28); border: 1px solid var(--stroke); outline: none;
+				transition: border-color .15s, box-shadow .15s;
+			}
+			select:focus, input:focus, textarea:focus { border-color: var(--a1); box-shadow: 0 0 0 3px rgba(177,108,255,0.18); }
+			select option { background: var(--bg2); }
+			textarea { resize: vertical; min-height: 70px; }
+
+			/* Toggle switch */
+			.toggle { display: flex; align-items: center; gap: 10px; margin-top: 13px; cursor: pointer; }
+			.toggle input { display: none; }
+			.track { width: 42px; height: 24px; border-radius: 20px; background: rgba(255,255,255,0.12); position: relative; transition: background .2s; flex: 0 0 auto; }
+			.track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform .2s; }
+			.toggle input:checked + .track { background: var(--grad); }
+			.toggle input:checked + .track::after { transform: translateX(18px); }
+			.toggle .lbl { font-size: 12.5px; }
+
+			/* Size slider */
+			.sizehead { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+			.sizeval { font-size: 24px; font-weight: 800; background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; font-variant-numeric: tabular-nums; }
+			input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 8px; border-radius: 10px; background: rgba(255,255,255,0.12); outline: none; }
+			input[type=range]::-webkit-slider-thumb {
+				-webkit-appearance: none; appearance: none; width: 22px; height: 22px; border-radius: 50%;
+				background: #fff; border: 3px solid var(--a1); cursor: pointer; box-shadow: 0 2px 10px rgba(177,108,255,0.6);
+			}
+			.ticks { display: flex; justify-content: space-between; font-size: 9.5px; color: var(--muted); margin-top: 7px; }
+
+			/* Buttons */
+			.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+			button {
+				font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; color: var(--txt);
+				padding: 9px 14px; border-radius: 11px; border: 1px solid var(--stroke);
+				background: rgba(255,255,255,0.05); transition: all .14s ease;
+			}
+			button:hover { background: rgba(255,255,255,0.12); transform: translateY(-1px); }
+			button.primary { background: var(--grad); color: #15111f; border: none; font-weight: 700; }
+			button.primary:hover { filter: brightness(1.08); }
+
+			.row { display: flex; gap: 10px; }
+			.row > .field { flex: 1; margin-top: 0; }
+
+			/* Reminders */
+			.remhead { display: flex; gap: 9px; align-items: flex-end; }
+			.remhead .grow { flex: 1; }
+			.remhead .when { flex: 0 0 182px; }
+			.quick { font-size: 11px; color: var(--muted); margin-top: 10px; }
+			.quick a { color: var(--a2); text-decoration: none; border-bottom: 1px dashed rgba(75,227,201,0.4); cursor: pointer; }
+			.quick a:hover { color: #fff; }
+			.remlist { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+			.rem {
+				display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px;
+				background: rgba(0,0,0,0.25); border: 1px solid var(--stroke);
+			}
+			.rem .when2 { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--a2); min-width: 84px; font-size: 12px; }
+			.rem .txt { flex: 1; }
+			.rem .tag { font-size: 9.5px; color: var(--muted); border: 1px solid var(--stroke); border-radius: 20px; padding: 2px 8px; text-transform: uppercase; letter-spacing: 0.06em; }
+			.rem.done { opacity: 0.45; }
+			.rem.done .txt { text-decoration: line-through; }
+			.rem button { padding: 5px 10px; font-size: 11px; }
+			.rem .del { color: var(--a3); border-color: rgba(255,126,182,0.35); }
+			.empty { color: var(--muted); font-size: 12px; text-align: center; padding: 12px; }
+			.hint { font-size: 11px; color: var(--muted); margin-top: 9px; line-height: 1.5; }
+			.footer { text-align: center; color: var(--muted); font-size: 10.5px; margin-top: 18px; }
+		</style>
+	</head>
+	<body>
+		<div class="wrap">
+			<div class="hero">
+				<div class="brand">
+					<div class="logo">🐾</div>
+					<div>
+						<h1>PixelPaw</h1>
+						<p>your desktop's tiny gremlin · control room</p>
+					</div>
+					<div class="live"><i></i> live</div>
+				</div>
+			</div>
+
+			<div class="card">
+				<h2><span class="dot"></span> Pick your paw</h2>
+				<div class="cats" id="cats"></div>
+			</div>
+
+			<div class="card">
+				<h2><span class="dot"></span> Customize — <span id="activeName"></span></h2>
+				<div class="studio">
+					<div class="stage"><canvas id="preview" width="124" height="132"></canvas></div>
+					<div class="fields">
+						<div class="swatches">
+							<div class="sw"><label>Color A</label><input type="color" id="bodyA" /></div>
+							<div class="sw"><label>Color B</label><input type="color" id="bodyB" /></div>
+							<div class="sw"><label>Paws</label><input type="color" id="accent" /></div>
+						</div>
+						<label class="toggle"><input type="checkbox" id="gradient" /><span class="track"></span><span class="lbl">Gradient coat (A → B)</span></label>
+						<div class="field"><label>Coat pattern</label>
+							<select id="pattern">
+								<option value="tuxedo">Tuxedo</option>
+								<option value="tabby">Tabby (stripes)</option>
+								<option value="solid">Solid</option>
+								<option value="calico">Calico</option>
+							</select>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<div class="card">
+				<h2><span class="dot"></span> Size</h2>
+				<div class="sizehead">
+					<span style="color:var(--muted);font-size:12px">drag to resize your cat</span>
+					<span class="sizeval" id="sizeval">75%</span>
+				</div>
+				<input type="range" id="scale" min="1" max="250" step="1" />
+				<div class="ticks"><span>1%</span><span>50%</span><span>125%</span><span>250%</span></div>
+			</div>
+
+			<div class="card">
+				<h2><span class="dot"></span> Name tag</h2>
+				<label class="toggle"><input type="checkbox" id="showName" /><span class="track"></span><span class="lbl">Show name under the cat</span></label>
+				<div class="field"><input type="text" id="petName" placeholder="name your cat…" maxlength="24" /></div>
+				<div class="hint">The name only shows when the toggle is on <i>and</i> you've typed a name.</div>
+			</div>
+
+			<div class="card">
+				<h2><span class="dot"></span> Vibes &amp; actions</h2>
+				<div class="chips">
+					<button class="primary" id="a-stretch">✋ Stretch</button>
+					<button id="a-jump">⬆ Jump</button>
+					<button id="a-purr">💖 Pet</button>
+					<button id="a-perch">😴 Perch</button>
+					<button id="a-pomo">🍅 Pomodoro</button>
+					<button id="a-pomo-stop">⏹ Stop</button>
+				</div>
+				<div class="field"><label>Pinned message (floats above the cat)</label><input type="text" id="pinnedMessage" placeholder="e.g. less is more…" /></div>
+			</div>
+
+			<div class="card">
+				<h2><span class="dot"></span> Timers</h2>
+				<div class="row">
+					<div class="field"><label>Focus min</label><input type="number" id="pomodoroFocus" min="1" max="180" /></div>
+					<div class="field"><label>Break min</label><input type="number" id="pomodoroBreak" min="1" max="60" /></div>
+					<div class="field"><label>Stretch every</label><input type="number" id="stretchMinutes" min="1" max="240" /></div>
+				</div>
+				<label class="toggle"><input type="checkbox" id="stretchEnabled" /><span class="track"></span><span class="lbl">Auto stretch reminders</span></label>
+			</div>
+
+			<div class="card">
+				<h2><span class="dot"></span> Notes</h2>
+				<textarea id="notes" placeholder="brain dump goes here…"></textarea>
+			</div>
+
+			<div class="card">
+				<h2><span class="dot"></span> Reminders</h2>
+				<div class="remhead">
+					<div class="field grow"><label>What</label><input type="text" id="remText" placeholder="e.g. Meeting" /></div>
+					<div class="field when"><label>When</label><input type="datetime-local" id="remWhen" /></div>
+					<button class="primary" id="remAdd">Add</button>
+				</div>
+				<div class="quick">quick add: <a id="q5">+5 min</a> · <a id="q15">+15 min</a> · <a id="q60">+1 hr</a> — the cat <b>shouts</b> it (no popup).</div>
+				<div class="remlist" id="remList"></div>
+			</div>
+
+			<div class="footer">PixelPaw · made for dev99dev8 🐾</div>
+		</div>
+
+		<script src="cat.js"></script>
+		<script src="controller.js"></script>
+	</body>
+</html>

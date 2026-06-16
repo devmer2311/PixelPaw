@@ -1,0 +1,57 @@
+{
+  "name": "pixelpaw",
+  "productName": "PixelPaw",
+  "version": "3.0.0",
+  "description": "PixelPaw — a pixel cat that lives on your desktop. Switchable cats, gradient colors, adjustable size, cursor follow, typing knead, horizontal stretch, perch, pet name, notes, reminders that make the cat shout, and Pomodoro timers.",
+  "main": "main.js",
+  "author": "DJ for dev99dev8",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist:mac": "electron-builder --mac",
+    "dist:win": "electron-builder --win",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "optionalDependencies": {
+    "uiohook-napi": "^1.5.5"
+  },
+  "build": {
+    "appId": "com.pixelpaw.app",
+    "productName": "PixelPaw",
+    "files": [
+      "**/*"
+    ],
+    "artifactName": "PixelPaw-${version}-${os}.${ext}",
+    "mac": {
+      "category": "public.app-category.entertainment",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "PixelPaw"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Game"
+    }
+  }
+}
