@@ -37,7 +37,7 @@ Think of it as a Tamagotchi that lives in the corner of your monitor and quietly
 | 🐾 **Typing knead** | Pats two little pads with a happy `>  <` squint. Type *too* much and it **overheats** — turns red with stress marks + steam. 😤 |
 | 🧻 **Scroll = toilet paper** | Scroll and watch a roll unfurl down the side. Chaos cat. |
 | 🙆 **Horizontal stretch** | Flops out long on all four legs in a big satisfying stretch. |
-| 🍡 **Mochi drag** | Grab and fling it — the body squishes and springs back like a mochi. |
+| 🖱️ **Drag to move** | Grab the cat and place it anywhere on your screen. |
 | 🛌 **Perch & nap** | Sits on top of the screen and dozes off, and idles into a nap on its own. |
 | 🏷️ **Pet name** | Give it a name — shown on a little tag *below* the cat. |
 | 🍅 **Pomodoro timer** | A red `Focus 00:00` badge floats just above its head while you grind. |
@@ -91,7 +91,7 @@ The finished installers land in the **`dist/`** folder. Share the `.exe` (Window
   - `Ctrl/Cmd + Alt + P` → Pomodoro 🍅
   - `Ctrl/Cmd + Alt + S` → stretch 🙆
   - `Ctrl/Cmd + Alt + C` → controller 🎛️
-- 🖱️ **Drag** the cat to move it (with a mochi squish 🍡). It's click-through everywhere else, so it never gets in your way.
+- 🖱️ **Drag** the cat to move it. It's click-through everywhere else, so it never gets in your way.
 
 ---
 

@@ -30,10 +30,6 @@ const S = {
 	huntUntil: 0,
 	huntLean: 0,
 	purrUntil: 0,
-	// mochi drag spring
-	mochi: 0,
-	mochiV: 0,
-	mochiTarget: 0,
 }
 
 let pomo = null
@@ -179,39 +175,59 @@ function sleep() { S.sleeping = true }
 function wake() { S.sleeping = false }
 function reportHit() { window.pet.setHitRegion(cat.hitBox()) }
 
-// dragging + mochi stretch
-let dragging = false
-let dragLast = null
-window.addEventListener("mousedown", (e) => {
+// Keep the canvas backing store matched to the window size AND the device
+// pixel ratio. This is what prevents the "big square / flicker / vanish"
+// glitch on scaled or HiDPI displays, and lets the grab area stay responsive
+// to the real cat size instead of a fixed box.
+function fitCanvas() {
+	const dpr = window.devicePixelRatio || 1
+	cat.resize(window.innerWidth, window.innerHeight, dpr)
+	reportHit()
+}
+window.addEventListener("resize", fitCanvas)
+
+// Is a point (CSS px, relative to the window) on the cat? Padding keeps even a
+// 1% cat comfortably grabbable.
+function overCatPoint(px, py) {
 	const b = cat.hitBox()
-	if (e.offsetX >= b.x && e.offsetX <= b.x + b.w && e.offsetY >= b.y && e.offsetY <= b.y + b.h) {
-		dragging = true
-		dragLast = { x: e.screenX, y: e.screenY }
-		S.mochiTarget = 0.32 // picked up: stretch tall
-		if (S.sleeping) wake()
+	const pad = 12
+	return px >= b.x - pad && px <= b.x + b.w + pad && py >= b.y - pad && py <= b.y + b.h + pad
+}
+
+// Dragging.
+// The window itself is moved by the MAIN process from the global cursor
+// position (DPI-safe, no delta accumulation, never drops the mouse capture).
+let dragging = false
+let holdingCat = false
+let pendingDrag = null
+window.addEventListener("mousedown", (e) => {
+	if (e.button === 0 && overCatPoint(e.clientX, e.clientY)) {
+		holdingCat = true
+		pendingDrag = { x: e.screenX, y: e.screenY }
+		S.huntUntil = 0
+		e.preventDefault()
 	}
 })
 window.addEventListener("mousemove", (e) => {
-	if (dragging && dragLast) {
-		const dx = e.screenX - dragLast.x
-		const dy = e.screenY - dragLast.y
-		if (dx || dy) window.pet.moveWindowBy(dx, dy)
-		// mochi: faster drag => more stretch
-		const spd = Math.hypot(dx, dy)
-		S.mochiTarget = Math.max(0.2, Math.min(0.7, 0.25 + spd * 0.02))
-		dragLast = { x: e.screenX, y: e.screenY }
-	}
+	if (!pendingDrag || dragging) return
+	const dx = e.screenX - pendingDrag.x
+	const dy = e.screenY - pendingDrag.y
+	if (Math.hypot(dx, dy) < 6) return
+	dragging = true
+	if (S.sleeping) wake()
+	window.pet.dragStart()
+	e.preventDefault()
 })
-window.addEventListener("mouseup", () => { dragging = false; dragLast = null; S.mochiTarget = 0; S.mochiV -= 0.18 /* release boing */ })
-window.addEventListener("dblclick", () => (S.purrUntil = now() + 1500))
-
-function updateMochi(dt) {
-	// critically-ish damped spring toward target
-	const k = 0.02, damp = 0.012
-	S.mochiV += (S.mochiTarget - S.mochi) * k * dt
-	S.mochiV *= Math.max(0, 1 - damp * dt)
-	S.mochi += S.mochiV * dt
+function endDrag() {
+	holdingCat = false
+	pendingDrag = null
+	if (!dragging) return
+	dragging = false
+	window.pet.dragEnd()
 }
+window.addEventListener("mouseup", endDrag)
+window.addEventListener("blur", endDrag)
+window.addEventListener("dblclick", () => (S.purrUntil = now() + 1500))
 
 // position floating HTML bits relative to the cat
 function layoutBubbles() {
@@ -273,8 +289,6 @@ function loop() {
 		if (S.hop >= 0) { S.hop = 0; S.hopV = 0 }
 	}
 
-	updateMochi(dt)
-
 	if (t < S.purrUntil && Math.random() < 0.15) spawnHeart()
 	S.hearts.forEach((h) => { h.y -= h.vy * dt * 0.06; h.x += h.vx; h.life -= dt * 0.0009 })
 	S.hearts = S.hearts.filter((h) => h.life > 0)
@@ -292,13 +306,9 @@ function loop() {
 	else if (t < S.purrUntil) name = "purr"
 	else if (t < S.huntUntil) name = "hunt"
 	else if (S.kneading) name = "knead"
+	if (holdingCat && !stretching) name = "idle"
 
-	let squashX = 0, squashY = Math.sin(t / 900) * 0.02, lean = 0, stretchProg = 0
-	if (dragging || Math.abs(S.mochi) > 0.01) {
-		// mochi: tall + thin when stretched
-		squashY += S.mochi
-		squashX += -S.mochi * 0.5
-	}
+	let squashX = 0, squashY = holdingCat ? 0 : Math.sin(t / 900) * 0.02, lean = 0, stretchProg = 0
 	if (stretching) {
 		// horizontal four-legged stretch pose is drawn by cat.js; keep body un-squashed
 		const pr = (t - S.stretchStart) / 2600
@@ -324,6 +334,6 @@ function loop() {
 	requestAnimationFrame(loop)
 }
 
-reportHit()
+fitCanvas()
 window.pet.requestSettings()
 requestAnimationFrame(loop)
