@@ -134,6 +134,8 @@
 			}
 
 			const kneadOn = state.name === "knead" || state.padsVisible
+			const walking = state.name === "walk"
+			const wp = walking ? (state.walkPhase || 0) : 0
 
 			// pads
 			if (kneadOn) {
@@ -142,7 +144,7 @@
 			}
 
 			// tail
-			const sway = Math.sin(state.t / 320) * 1.1
+			const sway = walking ? Math.sin(state.t / 180) * 1.8 : Math.sin(state.t / 320) * 1.1
 			this.r(16, 18 + sway, 4, 2, outline)
 			this.r(18, 13 + sway, 2, 6, grad(13, 19))
 			if (p.pattern === "tuxedo") this.r(18, 17 + sway, 2, 2, accent)
@@ -166,10 +168,17 @@
 				this.r(4, 16, 5, 6, "#3a3330"); this.r(11, 22, 5, 7, "#e98a3c")
 			} else { this.r(7, 23, 6, 6, shade(bodyA, 22)) }
 
-			// front legs + paws (alternating knead)
+			// front legs + paws (alternating knead / walk)
 			const kp = state.kneadPhase || 0
-			const lOff = kneadOn ? (Math.sin(kp) > 0 ? -1.4 : 0) : 0
-			const rOff = kneadOn ? (Math.sin(kp) > 0 ? 0 : -1.4) : 0
+			let lOff = 0, rOff = 0
+			if (kneadOn) {
+				lOff = Math.sin(kp) > 0 ? -1.4 : 0
+				rOff = Math.sin(kp) > 0 ? 0 : -1.4
+			}
+			if (walking) {
+				lOff = Math.sin(wp) * 1.8
+				rOff = Math.sin(wp + Math.PI) * 1.8
+			}
 			const pawColor = p.pattern === "tuxedo" ? accent : grad(26, 31)
 			this.round(4.5, 26 + lOff, 4, 5, outline); this.round(5, 26 + lOff, 3, 4, pawColor)
 			this.round(11.5, 26 + rOff, 4, 5, outline); this.round(12, 26 + rOff, 3, 4, pawColor)
