@@ -119,9 +119,9 @@ npm install uiohook-napi
 ### made with 🧶 and a little `meow`
 
 ```
-  (\_/)
+(\_/)
   ( ^.^ )  thanks for adopting me!
-  (")_(")
+(")_(")
 ```
 
 *if PixelPaw makes you smile, give it a little head pat* 🐾
