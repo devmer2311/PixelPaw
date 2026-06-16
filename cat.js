@@ -1,8 +1,8 @@
 /*
  * Pixel cat renderer v3 (Comnyang-style).
  * Parametric pixel-art cat with palette/pattern swaps, adjustable scale,
- * ">\u00a0<" squint face when typing/happy, two-pad kneading, mochi drag
- * stretch, working stretch pose, overheat redness + stress marks, sleep,
+ * ">\u00a0<" squint face when typing/happy, two-pad kneading,
+ * working stretch pose, overheat redness + stress marks, sleep,
  * paper unroll, hearts, steam, and a cursor-following gaze.
  */
 ;(function () {
@@ -33,14 +33,34 @@
 			this.ctx.imageSmoothingEnabled = false
 			this.P = 6
 			this.scale = 0.75
+			this.dpr = 1
+			// logical (CSS) drawing size — kept separate from the backing store
+			// so the cat stays crisp and correctly positioned on HiDPI / scaled displays.
+			this.cssW = canvas.width
+			this.cssH = canvas.height
 			this.palette = { ...PRESETS.tuxedo }
 			this.recompute()
 		}
 
+		// Resize the canvas to a CSS size while scaling the backing store by the
+		// device pixel ratio. All drawing is done in CSS pixels afterwards.
+		resize(cssW, cssH, dpr) {
+			this.dpr = Math.max(1, dpr || 1)
+			this.cssW = Math.max(1, Math.round(cssW))
+			this.cssH = Math.max(1, Math.round(cssH))
+			this.canvas.width = Math.round(this.cssW * this.dpr)
+			this.canvas.height = Math.round(this.cssH * this.dpr)
+			this.canvas.style.width = this.cssW + "px"
+			this.canvas.style.height = this.cssH + "px"
+			this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0)
+			this.ctx.imageSmoothingEnabled = false
+			this.recompute()
+		}
+
 		recompute() {
-			const W = this.canvas.width / this.P
+			const W = this.cssW / this.P
 			this.ox = Math.round((W - 20) / 2)
-			this.oy = Math.round(this.canvas.height / this.P - 34)
+			this.oy = Math.round(this.cssH / this.P - 34)
 		}
 
 		setPalette(p) { if (p) this.palette = { ...this.palette, ...p } }
@@ -60,7 +80,7 @@
 			return { x: f.x + (x0 - f.x) * sc, y: f.y + (y0 - f.y) * sc, w: w * sc, h: h * sc }
 		}
 
-		clear() { this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height) }
+		clear() { this.ctx.clearRect(0, 0, this.cssW, this.cssH) }
 
 		r(x, y, w, h, color) {
 			const P = this.P
@@ -94,7 +114,7 @@
 			// outer scale (size control) about foot
 			ctx.translate(f.x, f.y); ctx.scale(sc, sc); ctx.translate(-f.x, -f.y)
 
-			// squash / stretch / mochi about foot
+			// squash / stretch about foot
 			const footX = f.x, footY = f.y
 			const sx = 1 + (state.squashX || 0)
 			const sy = 1 + (state.squashY || 0)

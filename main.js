@@ -80,6 +80,35 @@ const WIN_W = 300
 const WIN_H = 340
 let hitRegion = { x: 80, y: 60, w: 140, h: 240 }
 let ignoring = true
+// drag state (window follows the global cursor while dragging)
+let dragging = false
+let dragStart = { x: 0, y: 0, bounds: null, moved: false }
+
+// The window grows/shrinks with the cat's scale so a 250% cat is never
+// clipped and a 1% cat isn't lost in a huge box. Bottom-center stays anchored.
+function sizeForScale(scale) {
+	const s = Math.max(0.01, Math.min(2.5, scale || 0.75))
+	const grow = Math.max(1, s) // only grow above 100%; small cats keep the base box
+	const w = Math.round(Math.max(220, Math.min(900, WIN_W * grow)))
+	const h = Math.round(Math.max(260, Math.min(1000, WIN_H * grow + 130))) // headroom for bubbles/timer
+	return { width: w, height: h }
+}
+
+function applyScaleSize() {
+	if (!win || win.isDestroyed()) return
+	const { width, height } = sizeForScale(settings.scale)
+	const b = win.getBounds()
+	if (b.width === width && b.height === height) return
+	const cx = b.x + b.width / 2
+	const bottom = b.y + b.height
+	const area = screen.getDisplayMatching(b).workArea
+	let x = Math.round(cx - width / 2)
+	let y = Math.round(bottom - height)
+	// keep on-screen
+	x = Math.max(area.x, Math.min(area.x + area.width - width, x))
+	y = Math.max(area.y, Math.min(area.y + area.height - height, y))
+	win.setBounds({ x, y, width, height })
+}
 
 function createWindow() {
 	const { width, height } = screen.getPrimaryDisplay().workAreaSize
@@ -109,6 +138,7 @@ function createWindow() {
 	if (process.platform === "darwin") win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
 	win.loadFile("index.html")
 	win.once("ready-to-show", () => {
+		applyScaleSize() // size the window for the saved scale before showing
 		win.showInactive()
 		win.setIgnoreMouseEvents(true, { forward: true })
 	})
@@ -135,6 +165,39 @@ function startCursorLoop() {
 		const dt = Math.max(1, now - last.t)
 		const speed = Math.hypot(pt.x - last.x, pt.y - last.y) / dt
 		last = { x: pt.x, y: pt.y, t: now }
+		// While dragging, move only after the cursor actually leaves the hold point.
+		// This is DPI-safe (screen points and bounds are both in DIP) and never
+		// toggles mouse capture, so the cat can't flicker or vanish mid-drag.
+		if (dragging) {
+			const startBounds = dragStart.bounds || b
+			const dragDx = pt.x - dragStart.x
+			const dragDy = pt.y - dragStart.y
+			if (!dragStart.moved && Math.hypot(dragDx, dragDy) < 4) {
+				win.webContents.send("cursor", {
+					x: pt.x, y: pt.y, localX: pt.x - b.x, localY: pt.y - b.y,
+					winX: b.x, winY: b.y, winW: b.width, winH: b.height,
+					speed: 0, overCat: true,
+				})
+				return
+			}
+			dragStart.moved = true
+			const area = screen.getDisplayNearestPoint(pt).workArea
+			let nx = startBounds.x + dragDx
+			let ny = startBounds.y + dragDy
+			const minX = area.x - hitRegion.x
+			const maxX = area.x + area.width - hitRegion.x - hitRegion.w
+			const minY = area.y - hitRegion.y
+			const maxY = area.y + area.height - hitRegion.y - hitRegion.h
+			nx = Math.max(Math.min(minX, maxX), Math.min(Math.max(minX, maxX), nx))
+			ny = Math.max(Math.min(minY, maxY), Math.min(Math.max(minY, maxY), ny))
+			win.setBounds({ x: Math.round(nx), y: Math.round(ny), width: b.width, height: b.height })
+			win.webContents.send("cursor", {
+				x: pt.x, y: pt.y, localX: pt.x - nx, localY: pt.y - ny,
+				winX: nx, winY: ny, winW: b.width, winH: b.height,
+				speed, overCat: true,
+			})
+			return
+		}
 		const localX = pt.x - b.x
 		const localY = pt.y - b.y
 		const overCat =
@@ -281,6 +344,19 @@ ipcMain.on("move-window-by", (_e, { dx, dy }) => {
 	const b = win.getBounds()
 	win.setBounds({ x: Math.round(b.x + dx), y: Math.round(b.y + dy), width: b.width, height: b.height })
 })
+ipcMain.on("drag-start", () => {
+	if (!win || win.isDestroyed()) return
+	const pt = screen.getCursorScreenPoint()
+	const b = win.getBounds()
+	dragStart = { x: pt.x, y: pt.y, bounds: b, moved: true }
+	dragging = true
+	// guarantee the window receives mouse events for the whole drag
+	if (ignoring) { win.setIgnoreMouseEvents(false); ignoring = false }
+})
+ipcMain.on("drag-end", () => {
+	dragging = false
+	dragStart = { x: 0, y: 0, bounds: null, moved: false }
+})
 ipcMain.on("request-settings", sendSettings)
 ipcMain.on("open-controller", openController)
 ipcMain.on("renderer-log", (_e, m) => console.log("[renderer]", m))
@@ -294,6 +370,7 @@ ipcMain.on("save-settings", (_e, patch) => {
 	saveSettings()
 	sendSettings()
 	refreshTray()
+	applyScaleSize() // window tracks the cat size so it never clips
 })
 
 // ---------- Lifecycle ----------

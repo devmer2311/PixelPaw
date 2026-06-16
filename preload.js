@@ -10,6 +10,9 @@ contextBridge.exposeInMainWorld("pet", {
 	// window -> main
 	setHitRegion: (rect) => ipcRenderer.send("set-hit-region", rect),
 	moveWindowBy: (dx, dy) => ipcRenderer.send("move-window-by", { dx, dy }),
+	// drag is driven by the main process from the global cursor (DPI-safe)
+	dragStart: () => ipcRenderer.send("drag-start"),
+	dragEnd: () => ipcRenderer.send("drag-end"),
 	requestSettings: () => ipcRenderer.send("request-settings"),
 	saveSettings: (patch) => ipcRenderer.send("save-settings", patch),
 	sendCommand: (name, payload) => ipcRenderer.send("command", { name, payload }),
