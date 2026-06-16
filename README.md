@@ -118,11 +118,11 @@ npm install uiohook-napi
 
 ### made with 🧶 and a little `meow`
 
-<p align="center">
-  <code>&nbsp;&nbsp;(\_/)</code><br>
-  <code>&nbsp;&nbsp;( ^.^ )&nbsp;&nbsp;thanks for adopting me!</code><br>
-  <code>&nbsp;&nbsp;(")_(")</code>
-</p>
+```
+  (\_/)
+  ( ^.^ )  thanks for adopting me!
+  (")_(")
+```
 
 *if PixelPaw makes you smile, give it a little head pat* 🐾
 
