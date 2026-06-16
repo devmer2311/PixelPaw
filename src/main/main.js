@@ -99,7 +99,7 @@ function createWindow() {
 		hasShadow: false,
 		fullscreenable: false,
 		webPreferences: {
-			preload: path.join(__dirname, "preload.js"),
+			preload: path.join(__dirname, "..", "preload", "preload.js"),
 			contextIsolation: true,
 			nodeIntegration: false,
 			backgroundThrottling: false,
@@ -107,7 +107,7 @@ function createWindow() {
 	})
 	win.setAlwaysOnTop(true, "screen-saver")
 	if (process.platform === "darwin") win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-	win.loadFile("index.html")
+	win.loadFile("src/renderer/index.html")
 	win.once("ready-to-show", () => {
 		win.showInactive()
 		win.setIgnoreMouseEvents(true, { forward: true })
@@ -181,7 +181,7 @@ function startGlobalHooks() {
 
 // ---------- Tray ----------
 function trayIcon() {
-	const p = path.join(__dirname, "assets", "tray.png")
+	const p = path.join(__dirname, "..", "..", "assets", "tray.png")
 	if (fs.existsSync(p)) return nativeImage.createFromPath(p)
 	return nativeImage.createEmpty()
 }
@@ -259,13 +259,13 @@ function openController() {
 		minimizable: true,
 		maximizable: false,
 		webPreferences: {
-			preload: path.join(__dirname, "preload.js"),
+			preload: path.join(__dirname, "..", "preload", "preload.js"),
 			contextIsolation: true,
 			nodeIntegration: false,
 		},
 	})
 	controllerWin.setMenuBarVisibility(false)
-	controllerWin.loadFile("controller.html")
+	controllerWin.loadFile("src/controller/controller.html")
 	controllerWin.webContents.on("did-finish-load", () => {
 		controllerWin.webContents.send("settings", settings)
 	})

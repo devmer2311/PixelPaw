@@ -3,7 +3,7 @@
   "productName": "PixelPaw",
   "version": "3.0.0",
   "description": "PixelPaw — a pixel cat that lives on your desktop. Switchable cats, gradient colors, adjustable size, cursor follow, typing knead, horizontal stretch, perch, pet name, notes, reminders that make the cat shout, and Pomodoro timers.",
-  "main": "main.js",
+  "main": "src/main/main.js",
   "author": "DJ for dev99dev8",
   "license": "MIT",
   "scripts": {
@@ -13,8 +13,8 @@
     "dist": "electron-builder"
   },
   "devDependencies": {
-    "electron": "^31.0.0",
-    "electron-builder": "^24.13.3"
+    "electron": "^42.4.0",
+    "electron-builder": "^26.15.3"
   },
   "optionalDependencies": {
     "uiohook-napi": "^1.5.5"
