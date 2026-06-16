@@ -4,11 +4,11 @@
 
 ### *a tiny pixel cat who lives on your desktop* 🐱✨
 
-```
-    /\_/\
-   ( o.o )   < mrrp! i live here now
-    > ^ <
-```
+<p align="center">
+  <code>&nbsp;&nbsp;&nbsp;&nbsp;/\_/\</code><br>
+  <code>&nbsp;&nbsp;&nbsp;( o.o )&nbsp;&nbsp;&nbsp;&lt; mrrp! i live here now</code><br>
+  <code>&nbsp;&nbsp;&nbsp;&nbsp;&gt; ^ &lt;</code>
+</p>
 
 **floats over your screen · follows your cursor · kneads while you type · naps · and shouts your reminders in the cutest little speech bubble**
 
@@ -118,11 +118,11 @@ npm install uiohook-napi
 
 ### made with 🧶 and a little `meow`
 
-```
-  (\_/)
-  ( ^.^ )  thanks for adopting me!
-  (")_(")
-```
+<p align="center">
+  <code>&nbsp;&nbsp;(\_/)</code><br>
+  <code>&nbsp;&nbsp;( ^.^ )&nbsp;&nbsp;thanks for adopting me!</code><br>
+  <code>&nbsp;&nbsp;(")_(")</code>
+</p>
 
 *if PixelPaw makes you smile, give it a little head pat* 🐾
 
