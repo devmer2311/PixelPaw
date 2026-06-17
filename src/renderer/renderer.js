@@ -9,9 +9,6 @@ const nameEl = document.getElementById("petname")
 let settings = null
 const now = () => performance.now()
 
-let lastCursorX = 0, lastCursorY = 0
-let lastWinX = 0, lastWinY = 0
-
 const S = {
 	eyeDir: { x: 0, y: 0 },
 	blink: 0,
@@ -33,23 +30,18 @@ const S = {
 	huntUntil: 0,
 	huntLean: 0,
 	purrUntil: 0,
-	// mochi drag spring
-	mochi: 0,
-	mochiV: 0,
-	mochiTarget: 0,
-	// walk
-	walkUntil: 0,
-	walkDir: { x: 0, y: 0 },
-	walkPhase: 0,
-	walkRemainderX: 0,
-	walkRemainderY: 0,
-	nextWalk: now() + 10000 + Math.random() * 5000,
 }
 
 let pomo = null
 let stretchTimer = null
 let shoutTimer = null
 const firedReminders = new Set()
+
+// idle-walk state (the main process moves the window; we animate the legs)
+let walking = false
+let walkMoving = false
+let walkDir = 1
+let walkPhase = 0
 
 function scheduleStretch() {
 	if (stretchTimer) clearTimeout(stretchTimer)
@@ -62,28 +54,6 @@ function triggerStretch() {
 	S.stretchStart = now()
 	S.stretchUntil = now() + 2600
 	// no text bubble during a stretch — just the pose
-}
-
-function triggerWalk() {
-	if (S.sleeping) wake()
-	const hb = cat.hitBox()
-	const catX = lastWinX + hb.x + hb.w / 2
-	const catY = lastWinY + hb.y + hb.h / 3
-	const dx = lastCursorX - catX
-	const dy = lastCursorY - catY
-	const dist = Math.hypot(dx, dy) || 1
-	const angle = Math.atan2(dy, dx)
-	S.walkDir = { x: Math.cos(angle), y: Math.sin(angle) * 0.3 }
-	S.walkUntil = now() + 3000 + Math.random() * 5000
-	S.walkPhase = 0
-	S.walkRemainderX = 0
-	S.walkRemainderY = 0
-}
-function stopWalking() {
-	if (S.walkUntil > 0) {
-		S.walkUntil = 0
-		S.nextWalk = now() + 8000 + Math.random() * 12000
-	}
 }
 
 function startPomodoro() {
@@ -171,12 +141,9 @@ function applySettings(s) {
 }
 
 function handleCursor(c) {
-	lastCursorX = c.x
-	lastCursorY = c.y
-	lastWinX = c.winX
-	lastWinY = c.winY
-	S.lastActivity = now()
-	if (S.sleeping) wake()
+	// only real cursor movement counts as activity (so naps/strolls aren't
+	// interrupted by the 60fps cursor stream)
+	if (c.speed > 0.1) { S.lastActivity = now(); if (S.sleeping) wake() }
 	const hb = cat.hitBox()
 	const centerX = c.winX + hb.x + hb.w / 2
 	const centerY = c.winY + hb.y + hb.h / 3
@@ -185,12 +152,9 @@ function handleCursor(c) {
 	S.eyeDir = { x: Math.max(-1, Math.min(1, dx / 130)), y: Math.max(-1, Math.min(1, dy / 130)) }
 	if (c.speed > 1.6 && d < 460) { S.huntUntil = now() + 480; S.huntLean = Math.max(-12, Math.min(12, dx / 28)) }
 	if (c.overCat && c.localY < hb.y + hb.h * 0.4 && c.speed < 0.5) S.purrUntil = now() + 700
-	// stop when cursor is overlapping the cat
-	if (c.overCat) stopWalking()
 }
 
 function handleKey() {
-	stopWalking()
 	S.lastActivity = now()
 	if (S.sleeping) wake()
 	const t = now()
@@ -200,10 +164,9 @@ function handleKey() {
 	S.kneadUntil = t + 700
 	if (S.lastKeys.length / 2.5 > 4) S.heat = Math.min(1, S.heat + 0.07)
 }
-function handleScroll() { stopWalking(); S.lastActivity = now(); if (S.sleeping) wake(); S.paperUntil = now() + 700 }
+function handleScroll() { S.lastActivity = now(); if (S.sleeping) wake(); S.paperUntil = now() + 700 }
 
 function handleCommand(c) {
-	stopWalking()
 	switch (c && c.name) {
 		case "purr": S.purrUntil = now() + 1800; break
 		case "jump": triggerJump(); break
@@ -213,6 +176,13 @@ function handleCommand(c) {
 		case "pomodoro-start": startPomodoro(); break
 		case "pomodoro-stop": stopPomodoro(); break
 		case "shout": if (c.payload) shout(String(c.payload), 5000); break
+		case "walk":
+			walking = true
+			walkMoving = !!(c.payload && c.payload.moving)
+			if (c.payload && c.payload.dir) walkDir = c.payload.dir
+			if (S.sleeping) wake()
+			break
+		case "walk-stop": walking = false; walkMoving = false; break
 	}
 }
 function sleep() { S.sleeping = true }
@@ -245,11 +215,11 @@ let dragging = false
 let holdingCat = false
 let pendingDrag = null
 window.addEventListener("mousedown", (e) => {
-	stopWalking()
 	if (e.button === 0 && overCatPoint(e.clientX, e.clientY)) {
 		holdingCat = true
 		pendingDrag = { x: e.screenX, y: e.screenY }
 		S.huntUntil = 0
+		walking = false; walkMoving = false // grabbing stops the stroll
 		e.preventDefault()
 	}
 })
@@ -257,7 +227,7 @@ window.addEventListener("mousemove", (e) => {
 	if (!pendingDrag || dragging) return
 	const dx = e.screenX - pendingDrag.x
 	const dy = e.screenY - pendingDrag.y
-	if (Math.hypot(dx, dy) < 6) return
+	if (Math.hypot(dx, dy) < 8) return
 	dragging = true
 	if (S.sleeping) wake()
 	window.pet.dragStart()
@@ -320,6 +290,9 @@ function loop() {
 	const dt = t - lastFrame
 	lastFrame = t
 
+	if (holdingCat && !dragging) S.purrUntil = t + 300 // cuddle (hearts) while held
+	if (walking && walkMoving && !holdingCat) walkPhase += dt * 0.012
+
 	S.heat = Math.max(0, S.heat - dt * 0.00025)
 	if (t > S.nextBlink) {
 		S.blink = 1
@@ -334,28 +307,6 @@ function loop() {
 		if (S.hop >= 0) { S.hop = 0; S.hopV = 0 }
 	}
 
-	// walk
-	if (S.walkUntil > now()) {
-		S.walkPhase += dt * 0.015
-		S.walkRemainderX += S.walkDir.x * 0.7 * (dt / 16)
-		S.walkRemainderY += S.walkDir.y * 0.7 * (dt / 16)
-		const ix = Math.round(S.walkRemainderX)
-		const iy = Math.round(S.walkRemainderY)
-		if (ix !== 0 || iy !== 0) {
-			window.pet.moveWindowBy(ix, iy)
-			S.walkRemainderX -= ix
-			S.walkRemainderY -= iy
-		}
-	} else if (S.walkUntil > 0) {
-		S.walkUntil = 0
-		S.walkPhase = 0
-		S.walkRemainderX = 0
-		S.walkRemainderY = 0
-		S.nextWalk = now() + 8000 + Math.random() * 12000
-	}
-
-	updateMochi(dt)
-
 	if (t < S.purrUntil && Math.random() < 0.15) spawnHeart()
 	S.hearts.forEach((h) => { h.y -= h.vy * dt * 0.06; h.x += h.vx; h.life -= dt * 0.0009 })
 	S.hearts = S.hearts.filter((h) => h.life > 0)
@@ -363,40 +314,51 @@ function loop() {
 	if (t < S.paperUntil) S.paperLen = Math.min(60, S.paperLen + dt * 0.4)
 	else S.paperLen = Math.max(0, S.paperLen - dt * 0.5)
 
-	if (!S.sleeping && t - S.lastActivity > 45000) sleep()
+	// Idle behavior is handled by the main process (the cat strolls around the
+	// screen). Manual nap/perch still set S.sleeping directly.
 
 	const stretching = t < S.stretchUntil
 	let name = "idle"
 	if (stretching) name = "stretch"
-	else if (S.walkUntil > now() && !S.sleeping) name = "walk"
 	else if (S.sleeping) name = "sleep"
-
-	if (name === "idle" && t > S.nextWalk) triggerWalk()
 	else if (S.heat > 0.55) name = "overheat"
 	else if (t < S.purrUntil) name = "purr"
 	else if (t < S.huntUntil) name = "hunt"
 	else if (S.kneading) name = "knead"
-	if (holdingCat && !stretching) name = "idle"
+	// idle stroll (driven by the main process) — animated stepping legs
+	if (walking && !stretching && !holdingCat) name = walkMoving ? "walk" : "idle"
+	// holding the cat without dragging = a happy cuddle (and it never moves)
+	if (holdingCat && !dragging && !stretching) name = "purr"
 
 	let squashX = 0, squashY = holdingCat ? 0 : Math.sin(t / 900) * 0.02, lean = 0, stretchProg = 0
+	let walkBob = 0
+	let faceDir = 1
 	if (stretching) {
 		// horizontal four-legged stretch pose is drawn by cat.js; keep body un-squashed
 		const pr = (t - S.stretchStart) / 2600
 		stretchProg = Math.sin(Math.min(1, pr) * Math.PI)
 		squashX = 0; squashY = 0; lean = 0
+	} else if (name === "walk") {
+		const bob = Math.abs(Math.sin(walkPhase * 2))
+		walkBob = -bob * 3 // gentle vertical bounce as it trots
+		squashY = -0.03 * bob
+		lean = walkDir * 0.6
+		faceDir = walkDir
 	} else if (name === "hunt") { lean = S.huntLean; squashY -= 0.08; squashX += 0.06 }
-	else if (name === "purr") { squashY += Math.sin(t / 80) * 0.015 }
+	else if (name === "purr") {
+		squashY += Math.sin(t / 80) * 0.015
+		if (holdingCat) squashX += Math.sin(t / 70) * 0.03 // little wiggle while held
+	}
 	else if (name === "overheat") { squashX += Math.sin(t / 60) * 0.02 }
-	else if (name === "walk") { squashY += Math.sin(S.walkPhase) * 0.04; squashX += Math.sin(S.walkPhase) * 0.015 }
 
 	cat.draw({
 		name, t,
 		eyeDir: S.eyeDir, blink: S.blink,
 		kneadPhase: S.kneadPhase, padsVisible: S.kneading,
-		hearts: S.hearts, paperLen: S.paperLen, hop: S.hop,
+		hearts: S.hearts, paperLen: S.paperLen, hop: S.hop + walkBob,
 		lean, squashX, squashY, stretchProg,
+		walkPhase, faceDir,
 		steam: name === "overheat" ? 1 : 0,
-		walkPhase: S.walkPhase,
 	})
 
 	tickPomodoro()

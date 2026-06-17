@@ -124,6 +124,11 @@
 			ctx.translate(-footX, -footY)
 			ctx.translate(state.lean || 0, 0)
 
+			// face the travel direction while walking (mirror about the foot)
+			if (state.faceDir < 0) {
+				ctx.translate(footX, 0); ctx.scale(-1, 1); ctx.translate(-footX, 0)
+			}
+
 			if (state.name === "stretch") {
 				this.drawStretch(state, grad, { bodyA, bodyB, accent, outline, nose, innerEar })
 				ctx.restore() // squash
@@ -134,8 +139,6 @@
 			}
 
 			const kneadOn = state.name === "knead" || state.padsVisible
-			const walking = state.name === "walk"
-			const wp = walking ? (state.walkPhase || 0) : 0
 
 			// pads
 			if (kneadOn) {
@@ -144,10 +147,20 @@
 			}
 
 			// tail
-			const sway = walking ? Math.sin(state.t / 180) * 1.8 : Math.sin(state.t / 320) * 1.1
+			const sway = Math.sin(state.t / 320) * 1.1
 			this.r(16, 18 + sway, 4, 2, outline)
 			this.r(18, 13 + sway, 2, 6, grad(13, 19))
 			if (p.pattern === "tuxedo") this.r(18, 17 + sway, 2, 2, accent)
+
+			// hind paws stepping (walk) — drawn behind the body
+			if (state.name === "walk") {
+				const wp = state.walkPhase || 0
+				const blo = Math.max(0, Math.sin(wp + Math.PI)) * -1.8
+				const bro = Math.max(0, Math.sin(wp)) * -1.8
+				const hc = p.pattern === "tuxedo" ? accent : grad(26, 31)
+				this.round(2.4, 27.6 + blo, 3.6, 4, outline); this.round(2.8, 27.8 + blo, 2.8, 3.2, hc)
+				this.round(14, 27.6 + bro, 3.6, 4, outline); this.round(14.4, 27.8 + bro, 2.8, 3.2, hc)
+			}
 
 			// body
 			this.round(3, 16, 14, 14, outline)
@@ -168,16 +181,14 @@
 				this.r(4, 16, 5, 6, "#3a3330"); this.r(11, 22, 5, 7, "#e98a3c")
 			} else { this.r(7, 23, 6, 6, shade(bodyA, 22)) }
 
-			// front legs + paws (alternating knead / walk)
+			// front legs + paws (alternating knead)
 			const kp = state.kneadPhase || 0
-			let lOff = 0, rOff = 0
-			if (kneadOn) {
-				lOff = Math.sin(kp) > 0 ? -1.4 : 0
-				rOff = Math.sin(kp) > 0 ? 0 : -1.4
-			}
-			if (walking) {
-				lOff = Math.sin(wp) * 1.8
-				rOff = Math.sin(wp + Math.PI) * 1.8
+			let lOff = kneadOn ? (Math.sin(kp) > 0 ? -1.4 : 0) : 0
+			let rOff = kneadOn ? (Math.sin(kp) > 0 ? 0 : -1.4) : 0
+			if (state.name === "walk") {
+				const wp = state.walkPhase || 0
+				lOff = Math.max(0, Math.sin(wp)) * -2.4
+				rOff = Math.max(0, Math.sin(wp + Math.PI)) * -2.4
 			}
 			const pawColor = p.pattern === "tuxedo" ? accent : grad(26, 31)
 			this.round(4.5, 26 + lOff, 4, 5, outline); this.round(5, 26 + lOff, 3, 4, pawColor)

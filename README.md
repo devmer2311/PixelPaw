@@ -5,9 +5,9 @@
 ### *a tiny pixel cat who lives on your desktop* 🐱✨
 
 ```
-/\_/\
-                          ( o.o )   < mrrp! i live here now
-> ^ <
+ /\_/\
+( o.o )   < mrrp! i live here now >
+ > ^ <
 ```
 
 **floats over your screen · follows your cursor · kneads while you type · naps · and shouts your reminders in the cutest little speech bubble**
@@ -53,7 +53,7 @@ npm install
 npm start
 ```
 
-> 🟢 Requires [Node.js](https://nodejs.org) **18+**. `npm install` downloads Electron, so it needs internet the first time.
+> 🟢 Requires [Node.js](https://nodejs.org/) **18+**. `npm install` downloads Electron, so it needs internet the first time.
 
 …and that's it — your new tiny friend appears. 🐾
 
@@ -64,13 +64,13 @@ npm start
 Want to send PixelPaw to a friend? It uses **electron-builder**. Build on the OS you're targeting:
 
 ```bash
-# 🪟 Windows  ->  dist/PixelPaw-3.0.0-win.exe   (NSIS installer)  + a portable .exe
+# 🪟 Windows  ->  dist/PixelPaw-1.2.0-win.exe   (NSIS installer)  + a portable .exe
 npm run dist:win
 
-# 🍎 macOS    ->  dist/PixelPaw-3.0.0-mac.dmg    (+ .zip)
+# 🍎 macOS    ->  dist/PixelPaw-1.2.0-mac.dmg    (+ .zip)
 npm run dist:mac
 
-# 🐧 Linux    ->  dist/PixelPaw-3.0.0-linux.AppImage
+# 🐧 Linux    ->  dist/PixelPaw-1.2.0-linux.AppImage
 npm run dist
 ```
 
@@ -116,12 +116,13 @@ npm install uiohook-napi
 
 <div align="center">
 
-### made with 🧶 and a little `meow`
+### made with 🧶 and a little
 
 ```
-  (\_/)
-                           ( ^.^ )  thanks for adopting me!
-  (")_(")
+meow
+(\_/)
+( ^.^ )  thanks for adopting me!
+(")_(")
 ```
 
 *if PixelPaw makes you smile, give it a little head pat* 🐾
