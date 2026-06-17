@@ -1,412 +1,475 @@
 /*
- * Pixel cat renderer v3 (Comnyang-style).
- * Parametric pixel-art cat with palette/pattern swaps, adjustable scale,
- * ">\u00a0<" squint face when typing/happy, two-pad kneading,
- * working stretch pose, overheat redness + stress marks, sleep,
- * paper unroll, hearts, steam, and a cursor-following gaze.
+ * Comnyang-style Pixel Cat Renderer — CatRenderer class
+ * Combines the improved drawing from comnyang_cat_2x with the
+ * CatRenderer API that renderer.js expects.
  */
 ;(function () {
-	const PRESETS = {
-		tuxedo: { id: "tuxedo", name: "Tuxedo", bodyA: "#3b3b40", bodyB: "#141417", accent: "#f6f6f2", gradient: true, pattern: "tuxedo" },
-		orange: { id: "orange", name: "Orange tabby", bodyA: "#f7a94a", bodyB: "#e07a2c", accent: "#fff1d6", gradient: true, pattern: "tabby" },
-		grey: { id: "grey", name: "Grey", bodyA: "#aab2ba", bodyB: "#727a82", accent: "#eef2f5", gradient: true, pattern: "solid" },
-		calico: { id: "calico", name: "Calico", bodyA: "#f5ead7", bodyB: "#e6cfa6", accent: "#ffffff", gradient: false, pattern: "calico" },
-	}
 
-	function toRGB(hex) {
-		const c = hex.replace("#", "")
-		return [parseInt(c.substring(0, 2), 16), parseInt(c.substring(2, 4), 16), parseInt(c.substring(4, 6), 16)]
-	}
-	function mix(h1, h2, t) {
-		const a = toRGB(h1), b = toRGB(h2)
-		return `rgb(${Math.round(a[0] + (b[0] - a[0]) * t)},${Math.round(a[1] + (b[1] - a[1]) * t)},${Math.round(a[2] + (b[2] - a[2]) * t)})`
-	}
-	function shade(hex, amt) {
-		const a = toRGB(hex)
-		return `rgb(${Math.max(0, Math.min(255, a[0] + amt))},${Math.max(0, Math.min(255, a[1] + amt))},${Math.max(0, Math.min(255, a[2] + amt))})`
-	}
+  const PRESETS = {
+    orange:  { id: "orange",  name: "Orange tabby", bodyA: "#f7a94a", bodyB: "#e07a2c", accent: "#fff1d6", belly: "#fff8ee", innerEar: "#f5a0b0", nose: "#e87090", gradient: true,  pattern: "tabby"   },
+    tuxedo:  { id: "tuxedo",  name: "Tuxedo",        bodyA: "#3b3b40", bodyB: "#141417", accent: "#f6f6f2", belly: "#f6f6f2", innerEar: "#f3a6c2", nose: "#e8728f", gradient: true,  pattern: "tuxedo"  },
+    grey:    { id: "grey",    name: "Grey",           bodyA: "#aab2ba", bodyB: "#727a82", accent: "#eef2f5", belly: "#f5f7f8", innerEar: "#f0a0c0", nose: "#d070a0", gradient: true,  pattern: "solid"   },
+    calico:  { id: "calico",  name: "Calico",         bodyA: "#f5ead7", bodyB: "#e6cfa6", accent: "#ffffff", belly: "#ffffff", innerEar: "#f5a0b8", nose: "#e06888", gradient: false, pattern: "calico"  },
+    cream:   { id: "cream",   name: "Cream",          bodyA: "#ffecd2", bodyB: "#e8c89a", accent: "#ffffff", belly: "#ffffff", innerEar: "#f8b0c0", nose: "#e88898", gradient: true,  pattern: "solid"   },
+  }
 
-	class CatRenderer {
-		constructor(canvas) {
-			this.canvas = canvas
-			this.ctx = canvas.getContext("2d")
-			this.ctx.imageSmoothingEnabled = false
-			this.P = 6
-			this.scale = 0.75
-			this.dpr = 1
-			// logical (CSS) drawing size — kept separate from the backing store
-			// so the cat stays crisp and correctly positioned on HiDPI / scaled displays.
-			this.cssW = canvas.width
-			this.cssH = canvas.height
-			this.palette = { ...PRESETS.tuxedo }
-			this.recompute()
-		}
+  function toRGB(h) {
+    const c = h.replace("#", "")
+    return [parseInt(c.slice(0, 2), 16), parseInt(c.slice(2, 4), 16), parseInt(c.slice(4, 6), 16)]
+  }
+  function mix(h1, h2, t) {
+    const a = toRGB(h1), b = toRGB(h2)
+    return `rgb(${Math.round(a[0] + (b[0] - a[0]) * t)},${Math.round(a[1] + (b[1] - a[1]) * t)},${Math.round(a[2] + (b[2] - a[2]) * t)})`
+  }
+  function shade(h, amt) {
+    const c = toRGB(h)
+    return `rgb(${Math.max(0, Math.min(255, c[0] + amt))},${Math.max(0, Math.min(255, c[1] + amt))},${Math.max(0, Math.min(255, c[2] + amt))})`
+  }
 
-		// Resize the canvas to a CSS size while scaling the backing store by the
-		// device pixel ratio. All drawing is done in CSS pixels afterwards.
-		resize(cssW, cssH, dpr) {
-			this.dpr = Math.max(1, dpr || 1)
-			this.cssW = Math.max(1, Math.round(cssW))
-			this.cssH = Math.max(1, Math.round(cssH))
-			this.canvas.width = Math.round(this.cssW * this.dpr)
-			this.canvas.height = Math.round(this.cssH * this.dpr)
-			this.canvas.style.width = this.cssW + "px"
-			this.canvas.style.height = this.cssH + "px"
-			this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0)
-			this.ctx.imageSmoothingEnabled = false
-			this.recompute()
-		}
+  class CatRenderer {
+    constructor(canvas) {
+      this.canvas = canvas
+      this.ctx = canvas.getContext("2d")
+      this.ctx.imageSmoothingEnabled = false
+      this.P = 8
+      this.scale = 0.75
+      this.dpr = 1
+      this.cssW = canvas.width
+      this.cssH = canvas.height
+      this.palette = { ...PRESETS.orange }
+      this.recompute()
+    }
 
-		recompute() {
-			const W = this.cssW / this.P
-			this.ox = Math.round((W - 20) / 2)
-			this.oy = Math.round(this.cssH / this.P - 34)
-		}
+    resize(cssW, cssH, dpr) {
+      this.dpr = Math.max(1, dpr || 1)
+      this.cssW = Math.max(1, Math.round(cssW))
+      this.cssH = Math.max(1, Math.round(cssH))
+      this.canvas.width = Math.round(this.cssW * this.dpr)
+      this.canvas.height = Math.round(this.cssH * this.dpr)
+      this.canvas.style.width = this.cssW + "px"
+      this.canvas.style.height = this.cssH + "px"
+      this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0)
+      this.ctx.imageSmoothingEnabled = false
+      this.recompute()
+    }
 
-		setPalette(p) { if (p) this.palette = { ...this.palette, ...p } }
-		setScale(s) { this.scale = Math.max(0.01, Math.min(2.5, s || 0.75)) }
+    recompute() {
+      const W = this.cssW / this.P
+      this.ox = Math.round((W - 22) / 2)
+      this.oy = Math.round(this.cssH / this.P - 34)
+    }
 
-		footPx() { return { x: (this.ox + 10) * this.P, y: (this.oy + 30) * this.P } }
+    setPalette(p) {
+      if (!p) return
+      const match = p.id ? PRESETS[p.id] : (p.pattern ? Object.values(PRESETS).find(pr => pr.pattern === p.pattern) : null)
+      this.palette = match ? { ...match, ...p } : { ...this.palette, ...p }
+    }
+    setScale(s) { this.scale = Math.max(0.01, Math.min(2.5, s || 0.75)) }
 
-		// pixel coords for a grid point, after applying current scale about foot
-		sp(gx, gy) {
-			const P = this.P, sc = this.scale, f = this.footPx()
-			return { x: f.x + ((this.ox + gx) * P - f.x) * sc, y: f.y + ((this.oy + gy) * P - f.y) * sc }
-		}
+    footPx() {
+      return { x: (this.ox + 10) * this.P, y: (this.oy + 31) * this.P }
+    }
 
-		hitBox() {
-			const P = this.P, sc = this.scale, f = this.footPx()
-			const x0 = (this.ox - 1) * P, y0 = (this.oy - 4) * P, w = 22 * P, h = 34 * P
-			return { x: f.x + (x0 - f.x) * sc, y: f.y + (y0 - f.y) * sc, w: w * sc, h: h * sc }
-		}
+    hitBox() {
+      const P = this.P, sc = this.scale, f = this.footPx()
+      const x0 = (this.ox - 1) * P, y0 = (this.oy - 4) * P, w = 22 * P, h = 34 * P
+      return {
+        x: f.x + (x0 - f.x) * sc,
+        y: f.y + (y0 - f.y) * sc,
+        w: w * sc,
+        h: h * sc,
+      }
+    }
 
-		clear() { this.ctx.clearRect(0, 0, this.cssW, this.cssH) }
+    clear() { this.ctx.clearRect(0, 0, this.cssW, this.cssH) }
 
-		r(x, y, w, h, color) {
-			const P = this.P
-			this.ctx.fillStyle = color
-			this.ctx.fillRect(Math.round((this.ox + x) * P), Math.round((this.oy + y) * P), Math.round(w * P), Math.round(h * P))
-		}
-		round(x, y, w, h, color) { this.r(x, y + 1, w, h - 2, color); this.r(x + 1, y, w - 2, h, color) }
+    // ── Drawing primitives ────────────────────────────────────────────────
 
-		draw(state) {
-			const ctx = this.ctx
-			this.clear()
-			const p = this.palette
-			const overheat = state.name === "overheat"
-			const bodyA = overheat ? "#e8503e" : p.bodyA
-			const bodyB = overheat ? "#a3251c" : p.bodyB
-			const accent = overheat ? "#ffd9d2" : p.accent
-			const outline = mix(bodyB, "#000000", 0.4)
-			const innerEar = "#f3a6c2"
-			const nose = overheat ? "#7a1d16" : "#e8728f"
-			const P = this.P
-			const grad = (a, b) => {
-				if (!p.gradient && !overheat) return bodyA
-				const g = ctx.createLinearGradient(0, (this.oy + a) * P, 0, (this.oy + b) * P)
-				g.addColorStop(0, bodyA); g.addColorStop(1, bodyB)
-				return g
-			}
+    r(x, y, w, h, color) {
+      const ctx = this.ctx
+      ctx.fillStyle = color
+      ctx.fillRect(
+        Math.round((this.ox + x) * this.P),
+        Math.round((this.oy + y) * this.P),
+        Math.round(w * this.P),
+        Math.round(h * this.P),
+      )
+    }
 
-			const f = this.footPx()
-			const sc = this.scale
-			ctx.save()
-			// outer scale (size control) about foot
-			ctx.translate(f.x, f.y); ctx.scale(sc, sc); ctx.translate(-f.x, -f.y)
+    bigRound(x, y, w, h, color, radMult) {
+      if (radMult === undefined) radMult = 0.38
+      const ctx = this.ctx, P = this.P
+      const rx = (this.ox + x) * P, ry = (this.oy + y) * P
+      const rw = w * P, rh = h * P
+      const rad = Math.min(rw, rh) * radMult
+      ctx.fillStyle = color
+      ctx.beginPath()
+      ctx.roundRect(rx, ry, rw, rh, rad)
+      ctx.fill()
+    }
 
-			// squash / stretch about foot
-			const footX = f.x, footY = f.y
-			const sx = 1 + (state.squashX || 0)
-			const sy = 1 + (state.squashY || 0)
-			ctx.save()
-			ctx.translate(footX, footY + (state.hop || 0))
-			ctx.scale(sx, sy)
-			ctx.translate(-footX, -footY)
-			ctx.translate(state.lean || 0, 0)
+    tri(x1, y1, x2, y2, x3, y3) {
+      const ctx = this.ctx, P = this.P
+      ctx.beginPath()
+      ctx.moveTo((this.ox + x1) * P, (this.oy + y1) * P)
+      ctx.lineTo((this.ox + x2) * P, (this.oy + y2) * P)
+      ctx.lineTo((this.ox + x3) * P, (this.oy + y3) * P)
+      ctx.closePath()
+      ctx.fill()
+    }
 
-			// face the travel direction while walking (mirror about the foot)
-			if (state.faceDir < 0) {
-				ctx.translate(footX, 0); ctx.scale(-1, 1); ctx.translate(-footX, 0)
-			}
+    drawArc(gx, gy) {
+      const ctx = this.ctx, P = this.P
+      const px = (this.ox + gx) * P, py = (this.oy + gy) * P
+      ctx.beginPath()
+      ctx.moveTo(px, py)
+      ctx.quadraticCurveTo(px + 1.5 * P, py - 1.8 * P, px + 3 * P, py)
+      ctx.stroke()
+    }
 
-			if (state.name === "stretch") {
-				this.drawStretch(state, grad, { bodyA, bodyB, accent, outline, nose, innerEar })
-				ctx.restore() // squash
-				this.scaledOverlays(state)
-				ctx.restore() // outer scale
-				this.screenOverlays(state)
-				return
-			}
+    chevron(cx, cy, dir) {
+      const ctx = this.ctx, P = this.P
+      ctx.beginPath()
+      ctx.moveTo((this.ox + cx - 1.2 * dir) * P, (this.oy + cy - 1.4) * P)
+      ctx.lineTo((this.ox + cx + 0.8 * dir) * P, (this.oy + cy) * P)
+      ctx.lineTo((this.ox + cx - 1.2 * dir) * P, (this.oy + cy + 1.4) * P)
+      ctx.stroke()
+    }
 
-			const kneadOn = state.name === "knead" || state.padsVisible
+    grad(ya, yb, a, b) {
+      if (!this.palette.gradient) return a
+      const ctx = this.ctx, P = this.P
+      const g = ctx.createLinearGradient(0, (this.oy + ya) * P, 0, (this.oy + yb) * P)
+      g.addColorStop(0, a); g.addColorStop(1, b)
+      return g
+    }
 
-			// pads
-			if (kneadOn) {
-				this.round(3, 29, 6, 3, "#a7abb2"); this.round(3, 29, 6, 2, "#c9ccd1")
-				this.round(11, 29, 6, 3, "#a7abb2"); this.round(11, 29, 6, 2, "#c9ccd1")
-			}
+    heart(x, y, rr) {
+      const ctx = this.ctx
+      ctx.beginPath()
+      ctx.moveTo(x, y + rr * 0.3)
+      ctx.bezierCurveTo(x, y, x - rr, y, x - rr, y + rr * 0.3)
+      ctx.bezierCurveTo(x - rr, y + rr * 0.7, x, y + rr, x, y + rr * 1.2)
+      ctx.bezierCurveTo(x, y + rr, x + rr, y + rr * 0.7, x + rr, y + rr * 0.3)
+      ctx.bezierCurveTo(x + rr, y, x, y, x, y + rr * 0.3)
+      ctx.fill()
+    }
 
-			// tail
-			const sway = Math.sin(state.t / 320) * 1.1
-			this.r(16, 18 + sway, 4, 2, outline)
-			this.r(18, 13 + sway, 2, 6, grad(13, 19))
-			if (p.pattern === "tuxedo") this.r(18, 17 + sway, 2, 2, accent)
+    drawEye(gx, gy, dx, dy, blinkAmt, squinting, sleeping, eyeOutline, eyeDark) {
+      const ctx = this.ctx, P = this.P
+      const outline = eyeOutline || mix(this.palette.bodyB, "#000000", 0.4)
+      if (sleeping) {
+        ctx.strokeStyle = outline
+        ctx.lineWidth = P * 0.45
+        ctx.lineCap = "round"
+        this.drawArc(gx, gy)
+        return
+      }
+      if (squinting) {
+        ctx.strokeStyle = eyeDark || mix(this.palette.bodyB, "#000", 0.35)
+        ctx.lineWidth = P * 0.5
+        ctx.lineCap = "round"
+        ctx.lineJoin = "round"
+        const dir = gx < 10 ? 1 : -1
+        this.chevron(gx + 1.5, gy, dir)
+        return
+      }
+      const eyeH = blinkAmt > 0.5 ? 0.5 : 3.5
+      this.bigRound(gx, gy, 3, eyeH, "#ffffff", 0.45)
+      if (blinkAmt <= 0.5) {
+        const ix = (this.ox + gx + 1 + dx) * P, iy = (this.oy + gy + 0.5 + dy) * P
+        ctx.fillStyle = "#3daa55"
+        ctx.beginPath(); ctx.ellipse(ix + P * 0.7, iy + P * 0.7, P * 0.85, P * 0.85, 0, 0, Math.PI * 2); ctx.fill()
+        ctx.fillStyle = "#0d1520"
+        ctx.beginPath(); ctx.ellipse(ix + P * 0.7, iy + P * 0.7, P * 0.45, P * 0.55, 0, 0, Math.PI * 2); ctx.fill()
+        ctx.fillStyle = "#ffffff"
+        ctx.beginPath(); ctx.ellipse(ix + P * 0.35, iy + P * 0.35, P * 0.22, P * 0.22, 0, 0, Math.PI * 2); ctx.fill()
+      }
+    }
 
-			// hind paws stepping (walk) — drawn behind the body
-			if (state.name === "walk") {
-				const wp = state.walkPhase || 0
-				const blo = Math.max(0, Math.sin(wp + Math.PI)) * -1.8
-				const bro = Math.max(0, Math.sin(wp)) * -1.8
-				const hc = p.pattern === "tuxedo" ? accent : grad(26, 31)
-				this.round(2.4, 27.6 + blo, 3.6, 4, outline); this.round(2.8, 27.8 + blo, 2.8, 3.2, hc)
-				this.round(14, 27.6 + bro, 3.6, 4, outline); this.round(14.4, 27.8 + bro, 2.8, 3.2, hc)
-			}
+    // ── Cat body drawing ──────────────────────────────────────────────────
 
-			// body
-			this.round(3, 16, 14, 14, outline)
-			this.round(4, 16, 12, 13, grad(16, 29))
-			if (p.pattern === "tuxedo") {
-				ctx.fillStyle = accent
-				ctx.beginPath()
-				const bx = (this.ox + 10) * P
-				ctx.moveTo(bx, (this.oy + 16) * P)
-				ctx.lineTo(bx - 4 * P, (this.oy + 29) * P)
-				ctx.lineTo(bx + 4 * P, (this.oy + 29) * P)
-				ctx.closePath(); ctx.fill()
-			} else if (p.pattern === "tabby") {
-				this.r(5, 19, 10, 1, mix(bodyB, "#000", 0.15))
-				this.r(5, 22, 10, 1, mix(bodyB, "#000", 0.15))
-				this.r(7, 24, 6, 5, shade(bodyA, 25))
-			} else if (p.pattern === "calico") {
-				this.r(4, 16, 5, 6, "#3a3330"); this.r(11, 22, 5, 7, "#e98a3c")
-			} else { this.r(7, 23, 6, 6, shade(bodyA, 22)) }
+    drawCat(state) {
+      const ctx = this.ctx, P = this.P
+      const p = this.palette
+      const overheat = state.name === "overheat"
+      const bodyA = overheat ? "#e8503e" : p.bodyA
+      const bodyB = overheat ? "#a3251c" : p.bodyB
+      const accent = overheat ? "#ffd9d2" : p.accent
+      const belly = overheat ? "#ffd9d2" : p.belly
+      const outline = mix(bodyB, "#000000", 0.4)
+      const innerEar = overheat ? "#e88878" : p.innerEar
+      const nose = overheat ? "#7a1d16" : p.nose
 
-			// front legs + paws (alternating knead)
-			const kp = state.kneadPhase || 0
-			let lOff = kneadOn ? (Math.sin(kp) > 0 ? -1.4 : 0) : 0
-			let rOff = kneadOn ? (Math.sin(kp) > 0 ? 0 : -1.4) : 0
-			if (state.name === "walk") {
-				const wp = state.walkPhase || 0
-				lOff = Math.max(0, Math.sin(wp)) * -2.4
-				rOff = Math.max(0, Math.sin(wp + Math.PI)) * -2.4
-			}
-			const pawColor = p.pattern === "tuxedo" ? accent : grad(26, 31)
-			this.round(4.5, 26 + lOff, 4, 5, outline); this.round(5, 26 + lOff, 3, 4, pawColor)
-			this.round(11.5, 26 + rOff, 4, 5, outline); this.round(12, 26 + rOff, 3, 4, pawColor)
+      const isKnead = state.name === "knead"
+      const isPurr = state.name === "purr"
+      const isSleep = state.name === "sleep"
+      const isWalk = state.name === "walk"
+      const squinting = isKnead || isPurr
 
-			// ears
-			ctx.fillStyle = outline
-			this.tri(2.5, 6, 5, 0, 6.5, 6); this.tri(13.5, 6, 15, 0, 17.5, 6)
-			ctx.fillStyle = bodyA
-			this.tri(3.5, 5.6, 5, 1.4, 6, 5.6); this.tri(14, 5.6, 15, 1.4, 16.5, 5.6)
-			ctx.fillStyle = innerEar
-			this.tri(4.4, 5.2, 5, 3, 5.6, 5.2); this.tri(14.6, 5.2, 15, 3, 15.8, 5.2)
+      let eyeDX = 0, eyeDY = 0
+      if (state.eyeDir && !squinting && !isSleep) {
+        eyeDX = (state.eyeDir.x || 0) * 0.6
+        eyeDY = (state.eyeDir.y || 0) * 0.4
+      }
 
-			// head
-			this.round(2, 5, 16, 12, outline)
-			this.round(3, 5, 14, 11, grad(5, 16))
-			this.r(3, 12, 14, 4, shade(bodyA, overheat ? 0 : 16))
-			if (p.pattern === "tabby" || p.pattern === "calico") {
-				this.r(9, 5, 1, 4, mix(bodyB, "#000", 0.2)); this.r(11, 5, 1, 4, mix(bodyB, "#000", 0.2))
-			}
-			if (p.pattern === "tuxedo") this.round(7, 11, 6, 4, accent)
+      const eyeOutline = mix(bodyB, "#000000", 0.4)
+      const eyeDark = overheat ? "#5a0f0b" : mix(bodyB, "#000", 0.35)
 
-			// eyes
-			const squint = state.name === "knead" || state.name === "purr" || state.name === "stretch"
-			const sleeping = state.name === "sleep"
-			const darkLine = mix(bodyB, "#000", 0.35)
-			if (sleeping) {
-				ctx.strokeStyle = darkLine; ctx.lineWidth = Math.max(2, P * 0.42); ctx.lineCap = "round"
-				this.arc(5.5, 9.5); this.arc(11.5, 9.5)
-			} else if (squint) {
-				// ">  <" happy face
-				ctx.strokeStyle = overheat ? "#5a0f0b" : darkLine
-				ctx.lineWidth = Math.max(2, P * 0.5); ctx.lineCap = "round"; ctx.lineJoin = "round"
-				this.chevron(6, 9.2, 1)
-				this.chevron(12, 9.2, -1)
-			} else {
-				const blink = state.blink || 0
-				const eyeH = blink > 0.5 ? 0.6 : 4
-				this.round(5, 7.5, 4, eyeH, "#ffffff"); this.round(11, 7.5, 4, eyeH, "#ffffff")
-				if (blink <= 0.5) {
-					const dx = ((state.eyeDir && state.eyeDir.x) || 0) * 1.4
-					const dy = ((state.eyeDir && state.eyeDir.y) || 0) * 1.4
-					const pup = overheat ? "#3a0f0b" : "#1d2740"
-					this.r(6.3 + dx, 8.6 + dy, 1.6, 2, pup); this.r(12.3 + dx, 8.6 + dy, 1.6, 2, pup)
-					this.r(6.5 + dx, 8.8 + dy, 0.6, 0.6, "#ffffff"); this.r(12.5 + dx, 8.8 + dy, 0.6, 0.6, "#ffffff")
-				}
-			}
+      // ── Tail ──────────────────────────────────────────────────────────
+      const sway = Math.sin((state.t || 0) / 320) * 1.2
+      const tg = this.grad(12, 22, bodyA, bodyB)
+      this.bigRound(18, 14 + sway, 4, 2, outline)
+      this.r(19, 10 + sway, 2, 5, tg)
+      this.r(17, 13 + sway, 5, 2, tg)
+      if (p.pattern === "tuxedo") this.r(19, 13 + sway, 2, 2, accent)
 
-			// nose + mouth
-			this.r(9.2, 11.4, 1.6, 1, nose)
-			if (overheat) this.r(8.6, 12.6, 2.8, 1.8, "#7a1d16")
-			if (overheat) {
-				this.r(4, 11.5, 2, 1.4, "rgba(255,120,120,0.85)")
-				this.r(14, 11.5, 2, 1.4, "rgba(255,120,120,0.85)")
-			}
+      // ── Hind paws (walk only, behind body) ────────────────────────────
+      if (isWalk) {
+        const wp = state.walkPhase || 0
+        const blo = Math.max(0, Math.sin(wp + Math.PI)) * -2
+        const bro = Math.max(0, Math.sin(wp)) * -2
+        const hc = p.pattern === "tuxedo" ? accent : this.grad(24, 30, bodyA, bodyB)
+        this.bigRound(2, 24 + blo, 4, 5, outline); this.bigRound(2.4, 24.2 + blo, 3.2, 4.2, hc)
+        this.bigRound(13, 24 + bro, 4, 5, outline); this.bigRound(13.4, 24.2 + bro, 3.2, 4.2, hc)
+      }
 
-			// whiskers
-			ctx.strokeStyle = overheat ? "rgba(90,20,20,0.6)" : "rgba(40,40,40,0.45)"
-			ctx.lineWidth = 1
-			const wy = (this.oy + 11.6) * P
-			ctx.beginPath()
-			ctx.moveTo((this.ox + 4) * P, wy); ctx.lineTo((this.ox - 1) * P, wy - 2)
-			ctx.moveTo((this.ox + 4) * P, wy + 2); ctx.lineTo((this.ox - 1) * P, wy + 3)
-			ctx.moveTo((this.ox + 14) * P, wy); ctx.lineTo((this.ox + 19) * P, wy - 2)
-			ctx.moveTo((this.ox + 14) * P, wy + 2); ctx.lineTo((this.ox + 19) * P, wy + 3)
-			ctx.stroke()
+      // ── Body ──────────────────────────────────────────────────────────
+      const bg = this.grad(14, 32, bodyA, bodyB)
+      this.bigRound(1, 13, 18, 20, outline, 0.42)
+      this.bigRound(2, 13, 16, 19, bg, 0.42)
+      this.bigRound(5, 17, 10, 12, belly, 0.48)
 
-			ctx.restore() // squash
-			this.scaledOverlays(state) // steam / zzz / paper / stress (scaled with body)
-			ctx.restore() // outer scale
+      if (p.pattern === "tabby") {
+        this.r(3, 16, 14, 1, mix(bodyB, "#000", 0.12))
+        this.r(3, 19, 14, 1, mix(bodyB, "#000", 0.12))
+        this.r(5, 21, 10, 6, shade(bodyA, 22))
+      } else if (p.pattern === "tuxedo") {
+        ctx.fillStyle = accent
+        ctx.beginPath()
+        const bx = (this.ox + 10) * P
+        ctx.moveTo(bx, (this.oy + 14) * P)
+        ctx.lineTo(bx - 5 * P, (this.oy + 32) * P)
+        ctx.lineTo(bx + 5 * P, (this.oy + 32) * P)
+        ctx.closePath(); ctx.fill()
+      } else if (p.pattern === "calico") {
+        this.r(2, 13, 6, 7, "#3a3330"); this.r(12, 19, 5, 8, "#e98a3c")
+      }
 
-			this.screenOverlays(state) // hearts in canvas space
-		}
+      // ── Front paws ────────────────────────────────────────────────────
+      let lOff = 0, rOff = 0
+      if (isKnead || isPurr) {
+        const kp = state.kneadPhase || 0
+        lOff = Math.sin(kp) > 0 ? -1.5 : 0
+        rOff = Math.sin(kp) > 0 ? 0 : -1.5
+      }
+      if (isWalk) {
+        const wp = state.walkPhase || 0
+        lOff = Math.max(0, Math.sin(wp)) * -2.8
+        rOff = Math.max(0, Math.sin(wp + Math.PI)) * -2.8
+      }
+      const pawC = p.pattern === "tuxedo" ? accent : this.grad(26, 32, bodyA, bodyB)
+      this.bigRound(3, 25 + lOff, 4.5, 6, outline, 0.45); this.bigRound(3.4, 25.2 + lOff, 3.7, 5.2, pawC, 0.45)
+      this.bigRound(12.5, 25 + rOff, 4.5, 6, outline, 0.45); this.bigRound(12.9, 25.2 + rOff, 3.7, 5.2, pawC, 0.45)
 
-		drawStretch(state, grad, c) {
-			const ctx = this.ctx
-			const ext = (state.stretchProg || 1) * 2 // how far the cat reaches out
-			const pawColor = this.palette.pattern === "tuxedo" ? c.accent : grad(26, 31)
+      if (state.padsVisible || isKnead || isPurr) {
+        const padC = "#d09090"
+        const kp = state.kneadPhase || 0
+        if (Math.sin(kp) > 0) this.bigRound(3.5, 29.5, 3, 1.2, padC, 0.45)
+        else this.bigRound(13, 29.5, 3, 1.2, padC, 0.45)
+      }
 
-			// tail raised at the right, curling up
-			const sway = Math.sin(state.t / 260) * 0.6
-			this.r(17, 14 + sway, 2, 7, c.outline)
-			this.r(17, 12.5 + sway, 4, 2, grad(13, 20))
-			this.r(19, 11 + sway, 2, 4, grad(13, 20))
+      // ── Ears ──────────────────────────────────────────────────────────
+      ctx.fillStyle = outline
+      this.tri(2, 6, 4.5, 0, 7, 6);    this.tri(13, 6, 15.5, 0, 18, 6)
+      ctx.fillStyle = bodyA
+      this.tri(3, 5.5, 4.5, 1.5, 6.5, 5.5);  this.tri(13.5, 5.5, 15.5, 1.5, 17.5, 5.5)
+      ctx.fillStyle = innerEar
+      this.tri(3.8, 5, 4.5, 3, 5.2, 5);      this.tri(14.3, 5, 15.5, 3, 16.3, 5)
 
-			// back legs (right pair)
-			this.round(12, 27, 3.5, 4, c.outline); this.round(12.3, 27.2, 3, 3.4, pawColor)
-			this.round(15.5, 27, 3.5, 4, c.outline); this.round(15.8, 27.2, 3, 3.4, pawColor)
+      // ── Head ──────────────────────────────────────────────────────────
+      this.bigRound(1, 4, 18, 14, outline, 0.48)
+      this.bigRound(2, 4, 16, 13, this.grad(4, 17, bodyA, bodyB), 0.48)
 
-			// long low body that lengthens to the left as it stretches
-			this.round(-1 - ext, 21, 21 + ext, 8, c.outline)
-			this.round(0 - ext, 21, 19 + ext, 7, grad(21, 29))
-			if (this.palette.pattern === "tuxedo") this.r(2 - ext, 25, 12 + ext, 4, c.accent)
-			else if (this.palette.pattern === "tabby") {
-				this.r(1 - ext, 23, 16 + ext, 1, mix(c.bodyB, "#000", 0.15))
-				this.r(1 - ext, 26, 16 + ext, 1, mix(c.bodyB, "#000", 0.15))
-			}
+      this.r(2, 12, 6, 4, shade(bodyA, overheat ? 0 : 20))
+      this.r(12, 12, 6, 4, shade(bodyA, overheat ? 0 : 20))
 
-			// front legs stretched forward to the left
-			this.round(-3 - ext, 27, 4, 4, c.outline); this.round(-2.6 - ext, 27.2, 3.2, 3.4, pawColor)
-			this.round(0.5 - ext, 27, 4, 4, c.outline); this.round(0.9 - ext, 27.2, 3.2, 3.4, pawColor)
+      if (p.pattern === "tabby" || p.pattern === "calico") {
+        this.r(9, 4, 1.5, 4, mix(bodyB, "#000", 0.18))
+        this.r(11.5, 4, 1.5, 4, mix(bodyB, "#000", 0.18))
+      }
+      if (p.pattern === "tuxedo") this.bigRound(6, 10, 8, 4, accent, 0.35)
 
-			// head low at the far left, ears on top
-			const hx = -4 - ext
-			ctx.fillStyle = c.outline
-			this.tri(hx + 1, 18, hx + 2.2, 15.2, hx + 3.4, 18); this.tri(hx + 4.8, 18, hx + 6, 15.2, hx + 7.2, 18)
-			ctx.fillStyle = c.bodyA
-			this.tri(hx + 1.6, 17.8, hx + 2.2, 16, hx + 2.8, 17.8); this.tri(hx + 5.4, 17.8, hx + 6, 16, hx + 6.6, 17.8)
-			ctx.fillStyle = c.innerEar
-			this.tri(hx + 1.9, 17.6, hx + 2.2, 16.6, hx + 2.5, 17.6); this.tri(hx + 5.7, 17.6, hx + 6, 16.6, hx + 6.3, 17.6)
-			this.round(hx, 18, 9, 9, c.outline)
-			this.round(hx + 1, 18, 7, 8, grad(18, 26))
-			if (this.palette.pattern === "tuxedo") this.round(hx + 2.5, 23, 4, 3.5, c.accent)
-			// ">  <" squint face
-			ctx.strokeStyle = state.name === "overheat" ? "#5a0f0b" : mix(c.bodyB, "#000", 0.35)
-			ctx.lineWidth = Math.max(2, this.P * 0.5); ctx.lineCap = "round"; ctx.lineJoin = "round"
-			this.chevron(hx + 3, 21.6, 1); this.chevron(hx + 6, 21.6, -1)
-			// nose
-			this.r(hx + 3.8, 24, 1.6, 1, c.nose)
-		}
+      // ── Eyes ──────────────────────────────────────────────────────────
+      this.drawEye(5, 7, eyeDX, eyeDY, state.blink || 0, squinting, isSleep, eyeOutline, eyeDark)
+      this.drawEye(12, 7, eyeDX, eyeDY, state.blink || 0, squinting, isSleep, eyeOutline, eyeDark)
 
-		chevron(cx, cy, dir) {
-			// dir=1 draws ">" (vertex right), dir=-1 draws "<" (vertex left)
-			const P = this.P, ctx = this.ctx
-			const x = (gx) => (this.ox + gx) * P
-			const y = (gy) => (this.oy + gy) * P
-			ctx.beginPath()
-			ctx.moveTo(x(cx - 1.2 * dir), y(cy - 1.4))
-			ctx.lineTo(x(cx + 0.8 * dir), y(cy))
-			ctx.lineTo(x(cx - 1.2 * dir), y(cy + 1.4))
-			ctx.stroke()
-		}
+      if (overheat) {
+        this.r(3, 10, 3, 2, "rgba(255,120,120,0.7)")
+        this.r(14, 10, 3, 2, "rgba(255,120,120,0.7)")
+      }
 
-		tri(x1, y1, x2, y2, x3, y3) {
-			const P = this.P, ctx = this.ctx
-			ctx.beginPath()
-			ctx.moveTo((this.ox + x1) * P, (this.oy + y1) * P)
-			ctx.lineTo((this.ox + x2) * P, (this.oy + y2) * P)
-			ctx.lineTo((this.ox + x3) * P, (this.oy + y3) * P)
-			ctx.closePath(); ctx.fill()
-		}
+      // ── Nose & mouth ─────────────────────────────────────────────────
+      this.bigRound(6, 11, 8, 4, belly, 0.4)
+      this.r(9, 11.5, 2, 1.2, nose)
+      if (overheat) this.r(7, 13, 6, 2, "#7a1d16")
 
-		arc(gx, gy) {
-			const P = this.P, ctx = this.ctx
-			const px = (this.ox + gx) * P, py = (this.oy + gy) * P
-			ctx.beginPath()
-			ctx.moveTo(px, py)
-			ctx.quadraticCurveTo(px + 1.5 * P, py - 1.8 * P, px + 3 * P, py)
-			ctx.stroke()
-		}
+      ctx.strokeStyle = mix(nose, "#000", 0.3); ctx.lineWidth = P * 0.35; ctx.lineCap = "round"
+      ctx.beginPath()
+      ctx.moveTo((this.ox + 9) * P, (this.oy + 13) * P)
+      ctx.lineTo((this.ox + 10) * P, (this.oy + 14) * P)
+      ctx.lineTo((this.ox + 11) * P, (this.oy + 13) * P)
+      ctx.stroke()
 
-		scaledOverlays(state) {
-			const ctx = this.ctx, P = this.P
-			if (state.steam) {
-				for (let i = 0; i < 3; i++) {
-					const ph = (state.t / 380 + i * 0.66) % 1
-					ctx.fillStyle = `rgba(225,225,225,${(1 - ph) * 0.6 * state.steam})`
-					ctx.beginPath()
-					ctx.arc((this.ox + 5 + i * 5) * P, (this.oy + 3) * P - ph * 30, 5 - ph * 2, 0, Math.PI * 2)
-					ctx.fill()
-				}
-				// stress marks (red dashes) above head
-				ctx.strokeStyle = "#e8503e"; ctx.lineWidth = 2; ctx.lineCap = "round"
-				for (let i = 0; i < 3; i++) {
-					const bob = Math.sin(state.t / 160 + i) * 2
-					const bx = (this.ox + 6 + i * 4) * P
-					const by = (this.oy + 2) * P + bob
-					ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx, by - 7); ctx.stroke()
-				}
-			}
-			if (state.name === "sleep") {
-				ctx.fillStyle = "#7a86a0"
-				const zph = (state.t / 720) % 1
-				ctx.globalAlpha = 1 - zph
-				ctx.font = "bold 13px Courier New"
-				ctx.fillText("z", (this.ox + 15) * P, (this.oy + 4) * P - zph * 20)
-				ctx.font = "bold 18px Courier New"
-				ctx.fillText("Z", (this.ox + 17) * P, (this.oy + 1) * P - zph * 26)
-				ctx.globalAlpha = 1
-			}
-			if (state.paperLen > 0) {
-				const rollX = (this.ox - 2) * P
-				const py = (this.oy + 30) * P
-				// unrolled sheet hanging down from roll
-				ctx.fillStyle = "#fdfdf5"
-				ctx.fillRect(rollX - 2, py, 9, state.paperLen)
-				ctx.strokeStyle = "#e2e0cc"; ctx.lineWidth = 1
-				ctx.strokeRect(rollX - 2, py, 9, state.paperLen)
-				// roll
-				ctx.fillStyle = "#eee7cc"
-				ctx.beginPath(); ctx.arc(rollX + 2.5, py, 8, 0, Math.PI * 2); ctx.fill()
-				ctx.fillStyle = "#cfc6a6"
-				ctx.beginPath(); ctx.arc(rollX + 2.5, py, 3, 0, Math.PI * 2); ctx.fill()
-			}
-		}
+      // ── Whiskers ─────────────────────────────────────────────────────
+      ctx.strokeStyle = overheat ? "rgba(80,20,20,0.5)" : "rgba(50,50,50,0.4)"
+      ctx.lineWidth = 1; ctx.lineCap = "round"
+      const wy = (this.oy + 12) * P
+      ctx.beginPath()
+      ctx.moveTo((this.ox + 5) * P, wy);           ctx.lineTo((this.ox - 1) * P, wy - 2)
+      ctx.moveTo((this.ox + 5) * P, wy + P * 0.3); ctx.lineTo((this.ox - 1) * P, wy + P * 0.3 + 2)
+      ctx.moveTo((this.ox + 15) * P, wy);          ctx.lineTo((this.ox + 21) * P, wy - 2)
+      ctx.moveTo((this.ox + 15) * P, wy + P * 0.3); ctx.lineTo((this.ox + 21) * P, wy + P * 0.3 + 2)
+      ctx.stroke()
 
-		screenOverlays(state) {
-			const ctx = this.ctx
-			if (state.hearts) {
-				for (const h of state.hearts) {
-					ctx.fillStyle = `rgba(255,90,140,${Math.max(0, h.life)})`
-					this.heart(h.x, h.y, 6 * h.life + 3)
-				}
-			}
-		}
+      // ── Blush ─────────────────────────────────────────────────────────
+      ctx.fillStyle = "rgba(255,150,140,0.28)"
+      ctx.beginPath(); ctx.ellipse((this.ox + 4.5) * P, (this.oy + 13) * P, P * 1.6, P * 1.1, 0, 0, Math.PI * 2); ctx.fill()
+      ctx.beginPath(); ctx.ellipse((this.ox + 15.5) * P, (this.oy + 13) * P, P * 1.6, P * 1.1, 0, 0, Math.PI * 2); ctx.fill()
+    }
 
-		heart(x, y, rr) {
-			const ctx = this.ctx
-			ctx.beginPath()
-			ctx.moveTo(x, y + rr * 0.3)
-			ctx.bezierCurveTo(x, y, x - rr, y, x - rr, y + rr * 0.3)
-			ctx.bezierCurveTo(x - rr, y + rr * 0.7, x, y + rr, x, y + rr * 1.2)
-			ctx.bezierCurveTo(x, y + rr, x + rr, y + rr * 0.7, x + rr, y + rr * 0.3)
-			ctx.bezierCurveTo(x + rr, y, x, y, x, y + rr * 0.3)
-			ctx.fill()
-		}
-	}
+    drawStretch(state) {
+      const ctx = this.ctx, P = this.P
+      const p = this.palette
+      const overheat = state.name === "overheat"
+      const bodyA = overheat ? "#e8503e" : p.bodyA
+      const bodyB = overheat ? "#a3251c" : p.bodyB
+      const accent = overheat ? "#ffd9d2" : p.accent
+      const outline = mix(bodyB, "#000000", 0.4)
+      const innerEar = overheat ? "#e88878" : p.innerEar
+      const nose = overheat ? "#7a1d16" : p.nose
 
-	window.CAT_PRESETS = PRESETS
-	window.CatRenderer = CatRenderer
+      const ext = (state.stretchProg || 1) * 2.5
+      const pawC = p.pattern === "tuxedo" ? accent : this.grad(26, 31, bodyA, bodyB)
+
+      this.bigRound(12, 23, 3, 4, outline);   this.bigRound(12.3, 23.2, 2.5, 3.2, pawC)
+      this.bigRound(15, 23, 3, 4, outline);   this.bigRound(15.3, 23.2, 2.5, 3.2, pawC)
+
+      this.bigRound(-6 - ext, 17, 26 + ext, 9, outline, 0.12)
+      this.bigRound(-5 - ext, 17, 24 + ext, 8, this.grad(17, 25, bodyA, bodyB), 0.12)
+      if (p.pattern === "tuxedo")       this.r(-3 - ext, 21, 18 + ext, 4, accent)
+      else if (p.pattern === "tabby") { this.r(-4 - ext, 19, 20 + ext, 1, mix(bodyB, "#000", 0.15)); this.r(-4 - ext, 22, 20 + ext, 1, mix(bodyB, "#000", 0.15)) }
+
+      this.bigRound(-8 - ext, 23, 4, 4, outline);  this.bigRound(-7.6 - ext, 23.2, 3.2, 3.4, pawC)
+      this.bigRound(-4.5 - ext, 23, 4, 4, outline); this.bigRound(-4.1 - ext, 23.2, 3.2, 3.4, pawC)
+
+      const hx = -9 - ext
+      ctx.fillStyle = outline
+      this.tri(hx + 1, 14, hx + 2.5, 10.5, hx + 4, 14);   this.tri(hx + 5, 14, hx + 6.5, 10.5, hx + 8, 14)
+      ctx.fillStyle = bodyA
+      this.tri(hx + 1.8, 13.8, hx + 2.5, 11.5, hx + 3.2, 13.8); this.tri(hx + 5.8, 13.8, hx + 6.5, 11.5, hx + 7.2, 13.8)
+      ctx.fillStyle = innerEar
+      this.tri(hx + 2.1, 13.6, hx + 2.5, 12.2, hx + 2.9, 13.6); this.tri(hx + 6.1, 13.6, hx + 6.5, 12.2, hx + 6.9, 13.6)
+      this.bigRound(hx, 14, 10, 10, outline, 0.45)
+      this.bigRound(hx + 1, 14, 8, 9, this.grad(14, 23, bodyA, bodyB), 0.45)
+      if (p.pattern === "tuxedo") this.bigRound(hx + 2, 19, 5, 4, accent, 0.4)
+
+      ctx.strokeStyle = overheat ? "#5a0f0b" : mix(bodyB, "#000", 0.35)
+      ctx.lineWidth = Math.max(2, P * 0.5); ctx.lineCap = "round"; ctx.lineJoin = "round"
+      this.chevron(hx + 4, 18, 1); this.chevron(hx + 7.5, 18, -1)
+      this.r(hx + 3.8, 20, 1.6, 1, nose)
+    }
+
+    // ── Overlays (after squash, before outer scale) ──────────────────────
+
+    drawOverlays(state) {
+      const ctx = this.ctx, P = this.P
+
+      if (state.steam) {
+        for (let i = 0; i < 3; i++) {
+          const ph = ((state.t || 0) / 380 + i * 0.66) % 1
+          ctx.fillStyle = `rgba(225,225,225,${(1 - ph) * 0.6 * state.steam})`
+          ctx.beginPath(); ctx.arc((this.ox + 5 + i * 5) * P, (this.oy + 3) * P - ph * 30, 5 - ph * 2, 0, Math.PI * 2); ctx.fill()
+        }
+        ctx.strokeStyle = "#e8503e"; ctx.lineWidth = 2; ctx.lineCap = "round"
+        for (let i = 0; i < 3; i++) {
+          const bob = Math.sin((state.t || 0) / 160 + i) * 2
+          const bx = (this.ox + 6 + i * 4) * P, by = (this.oy + 2) * P + bob
+          ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx, by - 7); ctx.stroke()
+        }
+      }
+
+      if (state.name === "sleep") {
+        ctx.fillStyle = "#7a86a0"
+        const zph = ((state.t || 0) / 720) % 1
+        ctx.globalAlpha = 1 - zph
+        ctx.font = `bold ${Math.round(P * 1.5)}px monospace`
+        ctx.fillText("z", (this.ox + 18) * P, (this.oy + 4) * P - zph * 25)
+        ctx.font = `bold ${Math.round(P * 2)}px monospace`
+        ctx.fillText("Z", (this.ox + 20) * P, (this.oy + 1) * P - zph * 30)
+        ctx.globalAlpha = 1
+      }
+
+      if (state.paperLen > 0) {
+        const rollX = (this.ox - 2) * P
+        const py = (this.oy + 30) * P
+        ctx.fillStyle = "#fdfdf5"
+        ctx.fillRect(rollX - 2, py, 9, state.paperLen)
+        ctx.strokeStyle = "#e2e0cc"; ctx.lineWidth = 1
+        ctx.strokeRect(rollX - 2, py, 9, state.paperLen)
+        ctx.fillStyle = "#eee7cc"
+        ctx.beginPath(); ctx.arc(rollX + 2.5, py, 8, 0, Math.PI * 2); ctx.fill()
+        ctx.fillStyle = "#cfc6a6"
+        ctx.beginPath(); ctx.arc(rollX + 2.5, py, 3, 0, Math.PI * 2); ctx.fill()
+      }
+    }
+
+    drawScreenOverlays(state) {
+      if (state.hearts) {
+        const ctx = this.ctx
+        for (const h of state.hearts) {
+          ctx.fillStyle = `rgba(255,80,140,${Math.max(0, h.life)})`
+          this.heart(h.x, h.y, 7 * h.life + 3)
+        }
+      }
+    }
+
+    // ── Main draw entry point ────────────────────────────────────────────
+
+    draw(state) {
+      this.clear()
+      const ctx = this.ctx
+      const f = this.footPx()
+      const sc = this.scale
+
+      ctx.save()
+      ctx.translate(f.x, f.y); ctx.scale(sc, sc); ctx.translate(-f.x, -f.y)
+
+      const sx = 1 + (state.squashX || 0)
+      const sy = 1 + (state.squashY || 0)
+      ctx.save()
+      ctx.translate(f.x, f.y + (state.hop || 0))
+      ctx.scale(sx, sy)
+      ctx.translate(-f.x, -f.y)
+      ctx.translate(state.lean || 0, 0)
+
+      if (state.faceDir < 0) {
+        ctx.translate(f.x, 0); ctx.scale(-1, 1); ctx.translate(-f.x, 0)
+      }
+
+      if (state.name === "stretch") {
+        this.drawStretch(state)
+      } else {
+        this.drawCat(state)
+      }
+
+      ctx.restore()
+      this.drawOverlays(state)
+      ctx.restore()
+      this.drawScreenOverlays(state)
+    }
+  }
+
+  window.CatRenderer = CatRenderer
+  window.CAT_PRESETS = PRESETS
 })()
