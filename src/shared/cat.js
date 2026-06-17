@@ -217,12 +217,50 @@
       const eyeDark = overheat ? "#5a0f0b" : mix(bodyB, "#000", 0.35)
 
       // ── Tail ──────────────────────────────────────────────────────────
-      const sway = Math.sin((state.t || 0) / 320) * 1.2
+      // Thick stroked curve — always a continuous shape, no gaps between segments.
+      // Wave motion travels from base (barely moves) to tip (largest swing).
+      const tailT = state.t || 0
       const tg = this.grad(12, 22, bodyA, bodyB)
-      this.bigRound(18, 14 + sway, 4, 2, outline)
-      this.r(19, 10 + sway, 2, 5, tg)
-      this.r(17, 13 + sway, 5, 2, tg)
-      if (p.pattern === "tuxedo") this.r(19, 13 + sway, 2, 2, accent)
+      const tPhase = tailT / 300
+
+      // Tail curve control points (grid coords).
+      // prog is used to scale the wave amplitude progressively toward the tip.
+      const tPts = [
+        { x: 17.5, y: 17, prog: 0.0 },
+        { x: 18,   y: 15, prog: 0.2 },
+        { x: 18.5, y: 13, prog: 0.4 },
+        { x: 18.8, y: 11, prog: 0.6 },
+        { x: 18.5, y: 9,  prog: 0.8 },
+        { x: 17.5, y: 7,  prog: 1.0 },
+        { x: 16,   y: 5.5, prog: 1.2 },
+      ]
+      const px = (gx) => (this.ox + gx) * P
+      const py = (gy) => (this.oy + gy) * P
+      ctx.beginPath()
+      for (const pt of tPts) {
+        const amp = pt.prog * 2.0
+        const sx = Math.sin(tPhase + pt.prog * 2.5) * amp * 0.35
+        const sy = Math.cos(tPhase * 0.85 + pt.prog * 2.2) * amp * 0.2
+        ctx.lineTo(px(pt.x + sx), py(pt.y + sy))
+      }
+      ctx.strokeStyle = outline
+      ctx.lineWidth = P * 2.8
+      ctx.lineCap = "round"
+      ctx.lineJoin = "round"
+      ctx.stroke()
+      ctx.strokeStyle = tg
+      ctx.lineWidth = P * 2.2
+      ctx.stroke()
+      if (p.pattern === "tuxedo") {
+        const tip = tPts[tPts.length - 1]
+        const amp = tip.prog * 2.0
+        const sx = Math.sin(tPhase + tip.prog * 2.5) * amp * 0.35
+        const sy = Math.cos(tPhase * 0.85 + tip.prog * 2.2) * amp * 0.2
+        ctx.beginPath()
+        ctx.arc(px(tip.x + sx), py(tip.y + sy), P * 1.0, 0, Math.PI * 2)
+        ctx.fillStyle = accent
+        ctx.fill()
+      }
 
       // ── Hind paws (walk only, behind body) ────────────────────────────
       if (isWalk) {
@@ -351,6 +389,45 @@
 
       const ext = (state.stretchProg || 1) * 2.5
       const pawC = p.pattern === "tuxedo" ? accent : this.grad(26, 31, bodyA, bodyB)
+
+      // ── Stretch tail ── raised upward at right (thick stroked curve)
+      const sT = state.t || 0
+      const sPhase = sT / 280
+      const spx = (gx) => (this.ox + gx) * P
+      const spy = (gy) => (this.oy + gy) * P
+      const sPts = [
+        { x: 17.5, y: 17, prog: 0.0 },
+        { x: 18,   y: 15, prog: 0.2 },
+        { x: 18.5, y: 13, prog: 0.4 },
+        { x: 18.8, y: 11, prog: 0.6 },
+        { x: 18.5, y: 9,  prog: 0.8 },
+        { x: 17.5, y: 7.5, prog: 1.0 },
+      ]
+      ctx.beginPath()
+      for (const pt of sPts) {
+        const amp = pt.prog * 1.5
+        const sx = Math.sin(sPhase + pt.prog * 2) * amp * 0.3
+        const sy = Math.cos(sPhase * 0.9 + pt.prog * 1.8) * amp * 0.15
+        ctx.lineTo(spx(pt.x + sx), spy(pt.y + sy))
+      }
+      ctx.strokeStyle = outline
+      ctx.lineWidth = P * 2.6
+      ctx.lineCap = "round"
+      ctx.lineJoin = "round"
+      ctx.stroke()
+      ctx.strokeStyle = this.grad(13, 20, bodyA, bodyB)
+      ctx.lineWidth = P * 2.0
+      ctx.stroke()
+      if (p.pattern === "tuxedo") {
+        const tip = sPts[sPts.length - 1]
+        const amp = tip.prog * 1.5
+        const sx = Math.sin(sPhase + tip.prog * 2) * amp * 0.3
+        const sy = Math.cos(sPhase * 0.9 + tip.prog * 1.8) * amp * 0.15
+        ctx.beginPath()
+        ctx.arc(spx(tip.x + sx), spy(tip.y + sy), P * 1.0, 0, Math.PI * 2)
+        ctx.fillStyle = accent
+        ctx.fill()
+      }
 
       this.bigRound(12, 23, 3, 4, outline);   this.bigRound(12.3, 23.2, 2.5, 3.2, pawC)
       this.bigRound(15, 23, 3, 4, outline);   this.bigRound(15.3, 23.2, 2.5, 3.2, pawC)

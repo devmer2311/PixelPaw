@@ -102,14 +102,26 @@ let lastWalkSig = ""
 let lastCursorPos = { x: 0, y: 0 }
 let lastCursorMoveMs = 0
 let walkPos = null // float window position while strolling (kept sub-pixel for smooth motion)
-const IDLE_MS = 12000 // after ~12s without typing/scrolling, the cat starts following the cursor
-const WALK_SPEED = 2.2 // px per 16ms frame — cute trot, scaled by real frame time below
+const IDLE_MS = 15000 // after ~12s without typing/scrolling, the cat starts following the cursor
+const WALK_SPEED = 0.9 // px per 16ms frame — cute trot, scaled by real frame time below
 const CURSOR_SETTLE_MS = 1200 // the cursor must rest this long before the cat walks over to it
 
 function workAreaFor(b) {
 	return screen.getDisplayNearestPoint({ x: b.x + Math.round(b.width / 2), y: b.y + Math.round(b.height / 2) }).workArea
 }
-// keep the CAT (its hit region), not the whole window, inside the current screen
+// keep the CAT (its hit region) inside the virtual desktop across all monitors
+function allDisplaysBounds() {
+	const all = screen.getAllDisplays()
+	let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+	for (const d of all) {
+		const w = d.workArea
+		if (w.x < minX) minX = w.x
+		if (w.y < minY) minY = w.y
+		if (w.x + w.width > maxX) maxX = w.x + w.width
+		if (w.y + w.height > maxY) maxY = w.y + w.height
+	}
+	return { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
+}
 function walkBounds(area) {
 	const minX = area.x - hitRegion.x
 	const maxX = area.x + area.width - hitRegion.x - hitRegion.w
@@ -123,11 +135,11 @@ function clampToWalkBounds(nx, ny, bnd) {
 	return { nx, ny }
 }
 // where the window must sit so the CAT (its hit-region center) lands on the cursor
-function cursorWalkTarget(area) {
+function cursorWalkTarget() {
 	const pt = screen.getCursorScreenPoint()
 	const tx = pt.x - (hitRegion.x + hitRegion.w / 2)
 	const ty = pt.y - (hitRegion.y + hitRegion.h / 2)
-	return clampToWalkBounds(tx, ty, walkBounds(area))
+	return clampToWalkBounds(tx, ty, walkBounds(allDisplaysBounds()))
 }
 function sendWalk(moving, dir) {
 	const sig = (moving ? "1" : "0") + ":" + dir
@@ -153,14 +165,13 @@ function stopWander() {
 function stepWander(dt) {
 	if (!win || win.isDestroyed()) return
 	const b = win.getBounds()
-	const area = workAreaFor(b)
 	if (!walkPos || !Number.isFinite(walkPos.x) || !Number.isFinite(walkPos.y)) {
 		walkPos = { x: b.x, y: b.y }
 	}
 	// Follow the cursor: walk toward wherever the pointer currently is, and sit
 	// once reached. Moving the cursor just re-points the target, so when the
 	// cursor stops the cat walks over and settles right there.
-	const tgt = cursorWalkTarget(area)
+	const tgt = cursorWalkTarget()
 	// Defensive: if geometry isn't ready yet (e.g. the hit region hasn't been
 	// measured, or a display just changed), bail this frame instead of feeding
 	// NaN into setPosition (which throws "conversion failure" and crashes).
@@ -180,7 +191,7 @@ function stepWander(dt) {
 	const step = Math.min(dist, WALK_SPEED * frames)
 	walkPos.x += (dx / dist) * step
 	walkPos.y += (dy / dist) * step
-	const clamped = clampToWalkBounds(walkPos.x, walkPos.y, walkBounds(area))
+	const clamped = clampToWalkBounds(walkPos.x, walkPos.y, walkBounds(allDisplaysBounds()))
 	walkPos.x = clamped.nx
 	walkPos.y = clamped.ny
 	if (dx < -0.5) walkDir = -1
