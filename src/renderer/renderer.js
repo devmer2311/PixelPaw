@@ -1,0 +1,373 @@
+/* Behavior + animation loop (v3). */
+const canvas = document.getElementById("cat")
+const cat = new CatRenderer(canvas)
+const pinEl = document.getElementById("pin")
+const timerEl = document.getElementById("timer")
+const shoutEl = document.getElementById("shout")
+const nameEl = document.getElementById("petname")
+
+let settings = null
+const now = () => performance.now()
+
+const S = {
+	eyeDir: { x: 0, y: 0 },
+	blink: 0,
+	nextBlink: now() + 3000,
+	kneadPhase: 0,
+	kneading: false,
+	kneadUntil: 0,
+	heat: 0,
+	lastKeys: [],
+	hearts: [],
+	paperLen: 0,
+	paperUntil: 0,
+	stretchStart: 0,
+	stretchUntil: 0,
+	hopV: 0,
+	hop: 0,
+	sleeping: false,
+	lastActivity: now(),
+	huntUntil: 0,
+	huntLean: 0,
+	purrUntil: 0,
+}
+
+let pomo = null
+let stretchTimer = null
+let shoutTimer = null
+const firedReminders = new Set()
+
+// idle-walk state (the main process moves the window; we animate the legs)
+let walking = false
+let walkMoving = false
+let walkDir = 1
+let walkPhase = 0
+
+function scheduleStretch() {
+	if (stretchTimer) clearTimeout(stretchTimer)
+	if (!settings || !settings.stretchEnabled) return
+	const ms = Math.max(1, settings.stretchMinutes || 30) * 60000
+	stretchTimer = setTimeout(() => { triggerStretch(); scheduleStretch() }, ms)
+}
+function triggerStretch() {
+	if (S.sleeping) wake()
+	S.stretchStart = now()
+	S.stretchUntil = now() + 2600
+	// no text bubble during a stretch — just the pose
+}
+
+function startPomodoro() {
+	const fM = Math.max(1, (settings && settings.pomodoroFocus) || 25) * 60000
+	const bM = Math.max(1, (settings && settings.pomodoroBreak) || 5) * 60000
+	pomo = { phase: "focus", endsAt: now() + fM, focusMs: fM, breakMs: bM }
+	timerEl.classList.remove("hidden", "break")
+}
+function stopPomodoro() { pomo = null; timerEl.classList.add("hidden") }
+function tickPomodoro() {
+	if (!pomo) return
+	if (pomo.endsAt - now() <= 0) {
+		if (pomo.phase === "focus") {
+			pomo.phase = "break"; pomo.endsAt = now() + pomo.breakMs
+			timerEl.classList.add("break"); triggerJump(); shout("Break time! \u2615", 4000)
+		} else {
+			pomo.phase = "focus"; pomo.endsAt = now() + pomo.focusMs
+			timerEl.classList.remove("break"); shout("Back to focus!", 4000)
+		}
+	}
+	const rem = Math.max(0, pomo.endsAt - now())
+	const mm = String(Math.floor(rem / 60000)).padStart(2, "0")
+	const ss = String(Math.floor((rem % 60000) / 1000)).padStart(2, "0")
+	timerEl.textContent = `${pomo.phase === "focus" ? "Focus" : "Break"} ${mm}:${ss}`
+}
+
+function triggerJump() { if (S.sleeping) wake(); S.hopV = -7 }
+
+// reminders: cat shouts only (no system notification)
+function checkReminders() {
+	if (!settings || !Array.isArray(settings.reminders)) return
+	const nowMs = Date.now()
+	let changed = false
+	for (const r of settings.reminders) {
+		if (r.done || firedReminders.has(r.id)) continue
+		if (r.at && r.at <= nowMs) {
+			firedReminders.add(r.id)
+			r.done = true
+			changed = true
+			if (S.sleeping) wake()
+			shout(r.text || "Reminder!", 9000)
+			triggerJump()
+		}
+	}
+	if (changed) window.pet.saveSettings({ reminders: settings.reminders })
+}
+
+function shout(text, ms) {
+	shoutEl.textContent = text
+	shoutEl.classList.remove("hidden")
+	shoutEl.style.animation = "none"
+	// eslint-disable-next-line no-unused-expressions
+	shoutEl.offsetHeight
+	shoutEl.style.animation = ""
+	if (shoutTimer) clearTimeout(shoutTimer)
+	shoutTimer = setTimeout(() => shoutEl.classList.add("hidden"), ms || 4000)
+}
+
+function spawnHeart() {
+	const hb = cat.hitBox()
+	S.hearts.push({ x: hb.x + hb.w / 2 + (Math.random() - 0.5) * 26, y: hb.y + 24, life: 1, vy: 0.5 + Math.random() * 0.4, vx: (Math.random() - 0.5) * 0.6 })
+}
+
+// inputs
+window.pet.onSettings((s) => applySettings(s))
+window.pet.onCursor((c) => handleCursor(c))
+window.pet.onKeyActivity(() => handleKey())
+window.pet.onScroll(() => handleScroll())
+window.pet.onCommand((c) => handleCommand(c))
+window.addEventListener("keydown", () => handleKey())
+window.addEventListener("wheel", () => handleScroll())
+
+function applySettings(s) {
+	settings = s
+	const active = (s.cats && s.cats[s.activeCat]) || null
+	if (active) cat.setPalette(active)
+	cat.setScale(typeof s.scale === "number" ? s.scale : 0.75)
+	if (s.pinnedMessage && s.pinnedMessage.trim()) { pinEl.textContent = s.pinnedMessage; pinEl.classList.remove("hidden") }
+	else pinEl.classList.add("hidden")
+	if (s.showName && s.petName && s.petName.trim()) { nameEl.textContent = s.petName; nameEl.classList.remove("hidden") }
+	else nameEl.classList.add("hidden")
+	if (Array.isArray(s.reminders)) for (const r of s.reminders) if (!r.done) firedReminders.delete(r.id)
+	scheduleStretch()
+	reportHit()
+}
+
+function handleCursor(c) {
+	// only real cursor movement counts as activity (so naps/strolls aren't
+	// interrupted by the 60fps cursor stream)
+	if (c.speed > 0.1) { S.lastActivity = now(); if (S.sleeping) wake() }
+	const hb = cat.hitBox()
+	const centerX = c.winX + hb.x + hb.w / 2
+	const centerY = c.winY + hb.y + hb.h / 3
+	const dx = c.x - centerX, dy = c.y - centerY
+	const d = Math.hypot(dx, dy) || 1
+	S.eyeDir = { x: Math.max(-1, Math.min(1, dx / 130)), y: Math.max(-1, Math.min(1, dy / 130)) }
+	if (c.speed > 1.6 && d < 460) { S.huntUntil = now() + 480; S.huntLean = Math.max(-12, Math.min(12, dx / 28)) }
+	if (c.overCat && c.localY < hb.y + hb.h * 0.4 && c.speed < 0.5) S.purrUntil = now() + 700
+}
+
+function handleKey() {
+	S.lastActivity = now()
+	if (S.sleeping) wake()
+	const t = now()
+	S.lastKeys.push(t)
+	S.lastKeys = S.lastKeys.filter((k) => t - k < 2500)
+	S.kneading = true
+	S.kneadUntil = t + 700
+	if (S.lastKeys.length / 2.5 > 4) S.heat = Math.min(1, S.heat + 0.07)
+}
+function handleScroll() { S.lastActivity = now(); if (S.sleeping) wake(); S.paperUntil = now() + 700 }
+
+function handleCommand(c) {
+	switch (c && c.name) {
+		case "purr": S.purrUntil = now() + 1800; break
+		case "jump": triggerJump(); break
+		case "stretch": triggerStretch(); break
+		case "toggle-sleep": S.sleeping ? wake() : sleep(); break
+		case "perch": sleep(); break
+		case "pomodoro-start": startPomodoro(); break
+		case "pomodoro-stop": stopPomodoro(); break
+		case "shout": if (c.payload) shout(String(c.payload), 5000); break
+		case "walk":
+			walking = true
+			walkMoving = !!(c.payload && c.payload.moving)
+			if (c.payload && c.payload.dir) walkDir = c.payload.dir
+			if (S.sleeping) wake()
+			break
+		case "walk-stop": walking = false; walkMoving = false; break
+	}
+}
+function sleep() { S.sleeping = true }
+function wake() { S.sleeping = false }
+function reportHit() { window.pet.setHitRegion(cat.hitBox()) }
+
+// Keep the canvas backing store matched to the window size AND the device
+// pixel ratio. This is what prevents the "big square / flicker / vanish"
+// glitch on scaled or HiDPI displays, and lets the grab area stay responsive
+// to the real cat size instead of a fixed box.
+function fitCanvas() {
+	const dpr = window.devicePixelRatio || 1
+	cat.resize(window.innerWidth, window.innerHeight, dpr)
+	reportHit()
+}
+window.addEventListener("resize", fitCanvas)
+
+// Is a point (CSS px, relative to the window) on the cat? Padding keeps even a
+// 1% cat comfortably grabbable.
+function overCatPoint(px, py) {
+	const b = cat.hitBox()
+	const pad = 12
+	return px >= b.x - pad && px <= b.x + b.w + pad && py >= b.y - pad && py <= b.y + b.h + pad
+}
+
+// Dragging.
+// The window itself is moved by the MAIN process from the global cursor
+// position (DPI-safe, no delta accumulation, never drops the mouse capture).
+let dragging = false
+let holdingCat = false
+let pendingDrag = null
+window.addEventListener("mousedown", (e) => {
+	if (e.button === 0 && overCatPoint(e.clientX, e.clientY)) {
+		holdingCat = true
+		pendingDrag = { x: e.screenX, y: e.screenY }
+		S.huntUntil = 0
+		walking = false; walkMoving = false // grabbing stops the stroll
+		e.preventDefault()
+	}
+})
+window.addEventListener("mousemove", (e) => {
+	if (!pendingDrag || dragging) return
+	const dx = e.screenX - pendingDrag.x
+	const dy = e.screenY - pendingDrag.y
+	if (Math.hypot(dx, dy) < 8) return
+	dragging = true
+	if (S.sleeping) wake()
+	window.pet.dragStart()
+	e.preventDefault()
+})
+function endDrag() {
+	holdingCat = false
+	pendingDrag = null
+	if (!dragging) return
+	dragging = false
+	window.pet.dragEnd()
+}
+window.addEventListener("mouseup", endDrag)
+window.addEventListener("blur", endDrag)
+window.addEventListener("dblclick", () => (S.purrUntil = now() + 1500))
+
+// position floating HTML bits relative to the cat
+function layoutBubbles() {
+	const hb = cat.hitBox()
+	const cx = hb.x + hb.w / 2
+	const headTop = hb.y + hb.h * 0.12
+	const feet = hb.y + hb.h * 0.92
+	const place = (el, bottomY) => {
+		el.style.left = cx + "px"
+		el.style.top = bottomY + "px"
+	}
+	// timer sits just above the head
+	let stack = headTop - 6
+	if (!timerEl.classList.contains("hidden")) {
+		timerEl.style.left = cx + "px"
+		timerEl.style.top = stack + "px"
+		timerEl.style.transform = "translate(-50%, -100%)"
+		stack -= timerEl.offsetHeight + 4
+	}
+	// shout above timer
+	if (!shoutEl.classList.contains("hidden")) {
+		shoutEl.style.left = cx + "px"
+		shoutEl.style.top = stack + "px"
+		shoutEl.style.transform = "translate(-50%, -100%)"
+		stack -= shoutEl.offsetHeight + 4
+	}
+	// pinned message above that
+	if (!pinEl.classList.contains("hidden")) {
+		pinEl.style.left = cx + "px"
+		pinEl.style.top = stack + "px"
+		pinEl.style.transform = "translate(-50%, -100%)"
+	}
+	// name below feet
+	if (!nameEl.classList.contains("hidden")) {
+		nameEl.style.left = cx + "px"
+		nameEl.style.top = feet + "px"
+		nameEl.style.transform = "translate(-50%, 0)"
+	}
+}
+
+let lastFrame = now()
+function loop() {
+	try {
+	const t = now()
+	const dt = t - lastFrame
+	lastFrame = t
+
+	if (holdingCat && !dragging) S.purrUntil = t + 300 // cuddle (hearts) while held
+	if (walking && walkMoving && !holdingCat) walkPhase += dt * 0.012
+
+	S.heat = Math.max(0, S.heat - dt * 0.00025)
+	if (t > S.nextBlink) {
+		S.blink = 1
+		if (t > S.nextBlink + 120) { S.blink = 0; S.nextBlink = t + 2500 + Math.random() * 3000 }
+	}
+	if (S.kneading && t > S.kneadUntil) S.kneading = false
+	if (S.kneading) S.kneadPhase += dt * 0.018
+
+	if (S.hopV !== 0 || S.hop < 0) {
+		S.hopV += dt * 0.06
+		S.hop += S.hopV
+		if (S.hop >= 0) { S.hop = 0; S.hopV = 0 }
+	}
+
+	if (t < S.purrUntil && Math.random() < 0.15) spawnHeart()
+	S.hearts.forEach((h) => { h.y -= h.vy * dt * 0.06; h.x += h.vx; h.life -= dt * 0.0009 })
+	S.hearts = S.hearts.filter((h) => h.life > 0)
+
+	if (t < S.paperUntil) S.paperLen = Math.min(60, S.paperLen + dt * 0.4)
+	else S.paperLen = Math.max(0, S.paperLen - dt * 0.5)
+
+	// Idle behavior is handled by the main process (the cat strolls around the
+	// screen). Manual nap/perch still set S.sleeping directly.
+
+	const stretching = t < S.stretchUntil
+	let name = "idle"
+	if (stretching) name = "stretch"
+	else if (S.sleeping) name = "sleep"
+	else if (S.heat > 0.55) name = "overheat"
+	else if (t < S.purrUntil) name = "purr"
+	else if (t < S.huntUntil) name = "hunt"
+	else if (S.kneading) name = "knead"
+	// idle stroll (driven by the main process) — animated stepping legs
+	if (walking && !stretching && !holdingCat) name = walkMoving ? "walk" : "idle"
+	// holding the cat without dragging = a happy cuddle (and it never moves)
+	if (holdingCat && !dragging && !stretching) name = "purr"
+
+	let squashX = 0, squashY = holdingCat ? 0 : Math.sin(t / 900) * 0.02, lean = 0, stretchProg = 0
+	let walkBob = 0
+	let faceDir = 1
+	if (stretching) {
+		// horizontal four-legged stretch pose is drawn by cat.js; keep body un-squashed
+		const pr = (t - S.stretchStart) / 2600
+		stretchProg = Math.sin(Math.min(1, pr) * Math.PI)
+		squashX = 0; squashY = 0; lean = 0
+	} else if (name === "walk") {
+		const bob = Math.abs(Math.sin(walkPhase * 2))
+		walkBob = -bob * 3 // gentle vertical bounce as it trots
+		squashY = -0.03 * bob
+		lean = walkDir * 0.6
+		faceDir = walkDir
+	} else if (name === "hunt") { lean = S.huntLean; squashY -= 0.08; squashX += 0.06 }
+	else if (name === "purr") {
+		squashY += Math.sin(t / 80) * 0.015
+		if (holdingCat) squashX += Math.sin(t / 70) * 0.03 // little wiggle while held
+	}
+	else if (name === "overheat") { squashX += Math.sin(t / 60) * 0.02 }
+
+	cat.draw({
+		name, t,
+		eyeDir: S.eyeDir, blink: S.blink,
+		kneadPhase: S.kneadPhase, padsVisible: S.kneading,
+		hearts: S.hearts, paperLen: S.paperLen, hop: S.hop + walkBob,
+		lean, squashX, squashY, stretchProg,
+		walkPhase, faceDir,
+		steam: name === "overheat" ? 1 : 0,
+	})
+
+	tickPomodoro()
+	checkReminders()
+	layoutBubbles()
+	} catch (e) { try { window.pet.log("loop error: " + (e && e.message)) } catch (_) {} }
+	requestAnimationFrame(loop)
+}
+
+fitCanvas()
+window.pet.requestSettings()
+requestAnimationFrame(loop)

@@ -1,0 +1,77 @@
+{
+  "name": "pixelpaw",
+  "productName": "PixelPaw",
+  "version": "1.2.0",
+  "description": "PixelPaw — a pixel cat that lives on your desktop. Switchable cats, gradient colors, adjustable size, cursor follow, typing knead, horizontal stretch, perch, idle stroll around the screen, hold-to-cuddle, pet name, notes, reminders that make the cat shout, and Pomodoro timers.",
+  "main": "src/main/main.js",
+  "author": "DJ for dev99dev8",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "version:sync": "node scripts/set-version.js",
+    "dist:mac": "npm run version:sync && electron-builder --mac",
+    "dist:win": "npm run version:sync && electron-builder --win",
+    "dist": "npm run version:sync && electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^42.4.0",
+    "electron-builder": "^26.15.3"
+  },
+  "optionalDependencies": {
+    "uiohook-napi": "^1.5.5"
+  },
+  "build": {
+    "appId": "com.pixelpaw.app",
+    "productName": "PixelPaw",
+    "npmRebuild": false,
+    "files": [
+      "**/*",
+      "!.env",
+      "!.env.example",
+      "!ANALYSIS.md",
+      "!scripts/set-version.js"
+    ],
+    "artifactName": "PixelPaw-${version}-${os}.${ext}",
+    "mac": {
+      "category": "public.app-category.entertainment",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "PixelPaw",
+      "artifactName": "PixelPaw-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "PixelPaw-Portable-${version}.${ext}"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Game"
+    }
+  }
+}
